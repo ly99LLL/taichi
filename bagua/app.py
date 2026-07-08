@@ -19,7 +19,7 @@ class BaguaApp:
         pygame.init()
         pygame.font.init()
         self.screen = pygame.display.set_mode((config.width, config.height))
-        pygame.display.set_caption("Mo Jing - Python Particle Demo")
+        pygame.display.set_caption("演卦 - Python Particle Demo")
         self.clock = pygame.time.Clock()
         self.renderer = Renderer(config)
         self.particles = ParticleSystem(config)

@@ -628,7 +628,7 @@ def render_video(args: argparse.Namespace) -> None:
     audio = SilentAudio(config)
     kick_impact = KickImpactOverlay(config)
 
-    temp_dir = Path(tempfile.mkdtemp(prefix="bagua_ink_"))
+    temp_dir = Path(tempfile.mkdtemp(prefix="yangua_ink_"))
     silent_video = temp_dir / "silent.mp4"
     writer = cv2.VideoWriter(
         str(silent_video),

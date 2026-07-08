@@ -5,7 +5,7 @@ import os
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Mo Jing / Bagua Python demo")
+    parser = argparse.ArgumentParser(description="演卦 Python demo")
     parser.add_argument("--input", choices=("mouse", "camera", "script"), default="mouse")
     parser.add_argument("--particles", type=int, default=3600)
     parser.add_argument("--width", type=int, default=1280)

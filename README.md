@@ -1,6 +1,6 @@
-# 墨·境 / Taichi Bagua
+# 演卦
 
-一个用 Python 实现的太极动作粒子视觉实验。项目通过鼠标、摄像头或离线视频读取动作轨迹，把速度、稳定性和停顿映射成水墨粒子的排斥、吸引、环绕与绽放。
+一个用 Python 实现的太极动作粒子视觉实验。演卦通过鼠标、摄像头或离线视频读取动作轨迹，把速度、稳定性和停顿映射成水墨粒子的排斥、吸引、环绕与绽放。
 
 > 隐私说明：仓库只保存源码、姿态模板和公开文档。原始视频、渲染成片、临时输出和本地工作记录都已被 `.gitignore` 排除，不应该提交到 GitHub。
 
@@ -74,7 +74,7 @@ python render_ink_video.py --input private/input.mp4 --output outputs/ink_demo.m
 .
 ├── main.py                    # 交互演示入口：mouse / camera / preview
 ├── render_ink_video.py        # 本地视频离线渲染工具
-├── bagua/                     # 粒子、输入、渲染、音频与姿态匹配模块
+├── bagua/                     # 演卦核心模块：粒子、输入、渲染、音频与姿态匹配
 ├── reference_poses/           # 24 式参考姿态模板与裁剪图
 ├── requirements.txt           # 运行依赖
 ├── pyproject.toml             # 项目元数据与开发工具配置

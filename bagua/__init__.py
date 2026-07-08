@@ -1,1 +1,1 @@
-"""Mo Jing Python demo package."""
+"""演卦 Python demo package."""
