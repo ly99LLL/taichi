@@ -1,0 +1,79 @@
+# Python caches and build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Tool caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# Environment files and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+secrets/
+credentials/
+
+# Private local media: do not publish videos
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+*.m4v
+*.wmv
+*.flv
+*.wav
+*.mp3
+*.aac
+*.m4a
+private/
+local_media/
+
+# Generated previews and render outputs
+preview*.png
+outputs/
+exports/
+renders/
+frames/
+*_frame.jpg
+*_frame.jpeg
+*.log
+tmp/
+temp/
+
+# Local source artifact used to build reference poses.
+# The public repo keeps generated reference_poses instead.
+jimeng-*.png
+
+# Local assistant / work notes that may mention private files
+CLAUDE.md
+agent.md

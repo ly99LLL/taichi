@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "taichi-bagua"
+version = "0.1.0"
+description = "A Python Tai Chi motion-driven ink particle visualization demo."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "ly99LLL" }]
+keywords = ["tai-chi", "particles", "mediapipe", "pygame", "computer-vision"]
+dependencies = [
+  "pygame>=2.6.1",
+  "numpy>=2.0",
+  "pillow>=10.0",
+  "moderngl>=5.12",
+  "opencv-python>=4.9",
+  "mediapipe>=0.10.9",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.6",
+]
+
+[project.scripts]
+taichi-bagua = "main:main"
+
+[project.urls]
+Homepage = "https://github.com/ly99LLL/taichi"
+Repository = "https://github.com/ly99LLL/taichi"
+Issues = "https://github.com/ly99LLL/taichi/issues"
+
+[tool.setuptools]
+packages = ["bagua"]
+py-modules = ["main", "render_ink_video"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

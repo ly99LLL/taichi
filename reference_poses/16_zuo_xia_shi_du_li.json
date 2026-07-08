@@ -1,0 +1,134 @@
+{
+  "name": "第十六式 左下势独立",
+  "slug": "16_zuo_xia_shi_du_li",
+  "description": "MediaPipe template cut from the 24-form Tai Chi infographic.",
+  "source": "二十四式图解图",
+  "normalization": "body_center_scale",
+  "bbox": {
+    "x1": 2600,
+    "y1": 1650,
+    "x2": 3270,
+    "y2": 2350
+  },
+  "landmark_ids": {
+    "left_shoulder": 11,
+    "right_shoulder": 12,
+    "left_elbow": 13,
+    "right_elbow": 14,
+    "left_wrist": 15,
+    "right_wrist": 16,
+    "left_hip": 23,
+    "right_hip": 24,
+    "left_knee": 25,
+    "right_knee": 26,
+    "left_ankle": 27,
+    "right_ankle": 28,
+    "left_foot": 31,
+    "right_foot": 32
+  },
+  "keypoints": {
+    "left_shoulder": {
+      "x": -0.317326,
+      "y": -0.325534,
+      "z": -0.521519,
+      "tolerance": 0.24
+    },
+    "right_shoulder": {
+      "x": -0.042745,
+      "y": -0.487161,
+      "z": -0.186938,
+      "tolerance": 0.24
+    },
+    "left_elbow": {
+      "x": -0.46072,
+      "y": -0.069984,
+      "z": -0.516509,
+      "tolerance": 0.31
+    },
+    "right_elbow": {
+      "x": 0.141368,
+      "y": -0.603077,
+      "z": 0.055921,
+      "tolerance": 0.31
+    },
+    "left_wrist": {
+      "x": -0.601064,
+      "y": 0.118842,
+      "z": -0.28624,
+      "tolerance": 0.38
+    },
+    "right_wrist": {
+      "x": 0.213659,
+      "y": -0.675996,
+      "z": 0.404064,
+      "tolerance": 0.38
+    },
+    "left_hip": {
+      "x": -0.078084,
+      "y": 0.052424,
+      "z": -0.114323,
+      "tolerance": 0.24
+    },
+    "right_hip": {
+      "x": 0.078084,
+      "y": -0.052424,
+      "z": 0.114323,
+      "tolerance": 0.24
+    },
+    "left_knee": {
+      "x": -0.168702,
+      "y": 0.098084,
+      "z": 0.638085,
+      "tolerance": 0.34
+    },
+    "right_knee": {
+      "x": 0.074104,
+      "y": -0.056134,
+      "z": 0.724666,
+      "tolerance": 0.34
+    },
+    "left_ankle": {
+      "x": 0.001998,
+      "y": 0.173652,
+      "z": 0.895096,
+      "tolerance": 0.4
+    },
+    "right_ankle": {
+      "x": 0.123174,
+      "y": 0.144884,
+      "z": 0.774107,
+      "tolerance": 0.4
+    },
+    "left_foot": {
+      "x": -0.036663,
+      "y": 0.186623,
+      "z": 0.952025,
+      "tolerance": 0.44
+    },
+    "right_foot": {
+      "x": 0.10596,
+      "y": 0.173477,
+      "z": 0.785258,
+      "tolerance": 0.44
+    }
+  },
+  "match_weights": {
+    "left_shoulder": 0.7,
+    "right_shoulder": 0.7,
+    "left_elbow": 1.15,
+    "right_elbow": 1.15,
+    "left_wrist": 1.55,
+    "right_wrist": 1.55,
+    "left_hip": 0.75,
+    "right_hip": 0.75,
+    "left_knee": 1.25,
+    "right_knee": 1.25,
+    "left_ankle": 1.65,
+    "right_ankle": 1.65,
+    "left_foot": 1.8,
+    "right_foot": 1.8
+  },
+  "effect": {
+    "type": "announce_only"
+  }
+}
