@@ -60,6 +60,7 @@ local_media/
 
 # Generated previews and render outputs
 preview*.png
+*_preview.png
 outputs/
 exports/
 renders/
