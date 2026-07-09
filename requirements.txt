@@ -1,0 +1,11 @@
+# yan_gua.py (py5 水墨版 — 主程序, 需要 JDK 17)
+py5>=0.10.0
+opencv-python>=4.8.0
+mediapipe>=0.10.0
+numpy>=1.24.0
+taichi>=1.7.0
+
+# main.py (OpenGL 3D 版 — 已废弃)
+# pygame>=2.5.0
+# moderngl>=5.8.0
+# opencv-python, mediapipe, numpy 同上
