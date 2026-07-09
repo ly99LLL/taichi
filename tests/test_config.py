@@ -8,8 +8,8 @@ def test_colors():
     assert cfg.BG_R == 16
     assert cfg.BG_G == 12
     assert cfg.BG_B == 8
-    assert len(cfg.INK_COLORS) == 6
-    assert cfg.NUM_INK_LEVELS == 6
+    assert len(cfg.INK_COLORS) == 8
+    assert cfg.NUM_INK_LEVELS == 8
     assert cfg.WARM_ACCENT == (200, 155, 90)
     assert cfg.WARM_LIGHT == (240, 210, 150)
 
@@ -22,6 +22,8 @@ def test_particle_constants():
     assert cfg.CURVATURE_REF == 400
     assert 0 < cfg.SMOOTH_ALPHA < 1
     assert cfg.BASE_DAMPING < 1.0
+    assert cfg.CENTER_GRAVITY > 0.00003
+    assert cfg.HAND_FORCE_MULTIPLIER > 1.0
     assert cfg.TRAIL_ALPHA > 0
 
 

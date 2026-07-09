@@ -8,7 +8,9 @@ import taichi as ti
 
 from yan_gua.config import (
     BASE_DAMPING,
+    CENTER_GRAVITY,
     CURVATURE_REF,
+    HAND_FORCE_MULTIPLIER,
     INFLUENCE_RADIUS,
     INK_COLORS,
     MAX_SPEED,
@@ -68,8 +70,8 @@ def _particle_physics_kernel(
         # 弱中心引力
         cx_m = win_w * 0.5
         cy_m = win_h * 0.5
-        vx[i] -= (px[i] - cx_m) * 0.00003
-        vy[i] -= (py[i] - cy_m) * 0.00003
+        vx[i] -= (px[i] - cx_m) * CENTER_GRAVITY
+        vy[i] -= (py[i] - cy_m) * CENTER_GRAVITY
 
         influenced = ti.i32(0)
 
@@ -179,35 +181,35 @@ def _apply_hand_force(
 
         # 1. 中空推力 (0-25%): 粒子向外猛推 → 掌心虚空
         if dist < infl_r * 0.25:
-            push = falloff * (8.0 + visc * 6.0)
+            push = falloff * (8.0 + visc * 6.0) * HAND_FORCE_MULTIPLIER
             vx[i] += rnx * push
             vy[i] += rny * push
 
         # 2. 环壁拉力 (25-40%): 轻吸维持边界 → 漩涡环
         if dist >= infl_r * 0.25 and dist < infl_r * 0.4:
-            attract = falloff * (0.8 + visc * 1.5)
+            attract = falloff * (0.8 + visc * 1.5) * HAND_FORCE_MULTIPLIER
             vx[i] -= rnx * attract
             vy[i] -= rny * attract
 
         # 3. 粘性拖拽: 手慢 → 粒子跟随手流动
-        vx[i] += hvx * falloff * visc * 0.08
-        vy[i] += hvy * falloff * visc * 0.08
+        vx[i] += hvx * falloff * visc * 0.08 * HAND_FORCE_MULTIPLIER
+        vy[i] += hvy * falloff * visc * 0.08 * HAND_FORCE_MULTIPLIER
 
         # 4. 飞溅: 手快 → 粒子向外迸裂
-        vx[i] += rnx * falloff * nspd * 2.5
-        vy[i] += rny * falloff * nspd * 2.5
+        vx[i] += rnx * falloff * nspd * 2.5 * HAND_FORCE_MULTIPLIER
+        vy[i] += rny * falloff * nspd * 2.5 * HAND_FORCE_MULTIPLIER
 
         # 5. 漩涡: 基线旋转 + 曲率叠加 → 画弧时更猛
         tx = -rny
         ty = rnx
         vortex_f = visc * 3.0 + hcurv_arr[h] * (3.0 + visc * 10.0)
-        vx[i] += tx * falloff * vortex_f
-        vy[i] += ty * falloff * vortex_f
+        vx[i] += tx * falloff * vortex_f * HAND_FORCE_MULTIPLIER
+        vy[i] += ty * falloff * vortex_f * HAND_FORCE_MULTIPLIER
 
         # 6. 呼吸: 纵深位移 → 膨胀/收缩
         breath = hzvel_arr[h] * 0.6
-        vx[i] += rnx * falloff * breath
-        vy[i] += rny * falloff * breath
+        vx[i] += rnx * falloff * breath * HAND_FORCE_MULTIPLIER
+        vy[i] += rny * falloff * breath * HAND_FORCE_MULTIPLIER
 
         # ---- 视觉响应 ----
         activity = ti.math.clamp(
@@ -216,27 +218,25 @@ def _apply_hand_force(
             1.0,
         )
 
-        # 透明度
-        if activity > 0.3:
-            alpha[i] += (22.0 * activity * falloff - alpha[i]) * 0.2
+        # 透明度: 在基准亮度上增亮，避免扰动时反而变暗
+        if activity > 0.15:
+            target_alpha = base_alpha[i] + 42.0 * activity * falloff
+            alpha[i] += (target_alpha - alpha[i]) * 0.2
         else:
             alpha[i] += (base_alpha[i] - alpha[i]) * 0.2
 
-        # 半径
+        # 半径: 限制膨胀，避免大圆叠加成混沌色块
         if activity > 0.1:
-            radius[i] += (base_radius[i] + falloff * 30.0 * activity - radius[i]) * 0.2
+            target_radius = base_radius[i] + falloff * 6.0 * activity
+            radius[i] += (target_radius - radius[i]) * 0.2
         else:
             radius[i] += (base_radius[i] - radius[i]) * 0.2
-
-        # 活跃粒子偏暖色调
-        if activity > 0.4:
-            ink_level[i] = ti.min(ink_level[i] + 1, 5)
 
         # 环带粒子额外增亮 → 漩涡环可见
         in_ring = dist >= infl_r * 0.25 and dist < infl_r * 0.4
         if in_ring and activity > 0.15:
-            alpha[i] = ti.min(alpha[i] + 3.0, 27.0)
-            radius[i] = ti.min(radius[i] + 2.0, 37.0)
+            alpha[i] = ti.min(alpha[i] + 5.0, 72.0)
+            radius[i] = ti.min(radius[i] + 1.0, 11.0)
 
 
 # ============================================================
@@ -262,12 +262,12 @@ class CloudParticles:
         self.vy = rng.uniform(-0.5, 0.5, count).astype(np.float32)
 
         # 视觉属性
-        self.alpha = rng.uniform(2, 12, count).astype(np.float32)
-        self.radius = rng.uniform(3, 15, count).astype(np.float32)
+        self.alpha = rng.uniform(10, 24, count).astype(np.float32)
+        self.radius = rng.uniform(1.8, 5.2, count).astype(np.float32)
         self.ink_level = rng.choice(
             NUM_INK_LEVELS,
             count,
-            p=[0.04, 0.08, 0.13, 0.22, 0.28, 0.25],
+            p=[0.16, 0.14, 0.13, 0.12, 0.11, 0.13, 0.12, 0.09],
         ).astype(np.int32)
 
         # 基准状态 (不受手影响时的回归目标)
@@ -387,7 +387,8 @@ class CloudParticles:
         d = np.sqrt(dx * dx + dy * dy)
         if d < INFLUENCE_RADIUS * 0.7:
             t_val = 1.0 - d / (INFLUENCE_RADIUS * 0.7)
-            cr = int(cr + (WARM_LIGHT[0] - cr) * t_val * 0.5)
-            cg = int(cg + (WARM_LIGHT[1] - cg) * t_val * 0.5)
-            cb = int(cb + (WARM_LIGHT[2] - cb) * t_val * 0.5)
+            # 仅轻微注入暖光，保留粒子原本的色相
+            cr = int(cr + (WARM_LIGHT[0] - cr) * t_val * 0.25)
+            cg = int(cg + (WARM_LIGHT[1] - cg) * t_val * 0.25)
+            cb = int(cb + (WARM_LIGHT[2] - cb) * t_val * 0.25)
         return cr, cg, cb

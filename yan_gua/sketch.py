@@ -319,7 +319,7 @@ def setup():
     _open_record_writer()
 
     print("=== 演卦 · 星尘太极 (py5 + Taichi GPU) ===")
-    print("  [ESC] quit  [F] fullscreen  [D] debug  [↻] restart")
+    print("  [ESC] quit  [F] fullscreen  [D] debug  [click] restart")
     if _video_path:
         mirror_label = "mirrored like camera" if _mirror_video else "not mirrored"
         print(f"  video input: {_video_path} @ {_source_fps:.3f} fps ({mirror_label})")
