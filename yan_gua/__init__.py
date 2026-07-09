@@ -1,11 +1,8 @@
-"""演卦 · 星尘太极 (Stardust Taichi).
+"""演卦 · 双生涡场。
 
-太极手势驱动的星尘粒子实时交互系统。不识别具体招式，读取手势"运动气质"
-（手速/曲直/纵深）并翻译为粒子物理响应。
-
-美学方向：暗宇宙星尘场 + 琥珀搅动 + 旋转星云 + 劲断意不断。
+慢手组织常驻尘埃，快手打散轨道；检测丢失后以余涡连续释放粒子。
 """
 
-__version__ = "3.0.0"
+__version__ = "4.0.0"
 __author__ = "ly99LLL"
-__description__ = "Tai Chi gesture-driven stardust particle interactive system"
+__description__ = "Two-hand real-time stardust vortex field"

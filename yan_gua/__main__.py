@@ -1,4 +1,4 @@
-"""演卦 · 星尘太极 — 入口模块.
+"""演卦 · 双生涡场 — 入口模块.
 
 用法:
     python -m yan_gua
@@ -59,24 +59,27 @@ def _warmup():
         hy_arr=np.array([360.0, 0.0], dtype=np.float32),
         hvx_arr=np.zeros(2, dtype=np.float32),
         hvy_arr=np.zeros(2, dtype=np.float32),
-        hspd_arr=np.array([50.0, 0.0], dtype=np.float32),
-        hcurv_arr=np.zeros(2, dtype=np.float32),
-        hzvel_arr=np.zeros(2, dtype=np.float32),
+        hstrength_arr=np.array([1.0, 0.0], dtype=np.float32),
+        hcoherence_arr=np.array([1.0, 0.0], dtype=np.float32),
+        hscatter_arr=np.zeros(2, dtype=np.float32),
+        hrelease_arr=np.zeros(2, dtype=np.float32),
+        hmaturity_arr=np.array([1.0, 0.0], dtype=np.float32),
+        haperture_arr=np.zeros(2, dtype=np.float32),
+        hspin_arr=np.array([1.0, -1.0], dtype=np.float32),
         hactive_arr=np.array([1, 0], dtype=np.int32),
         dt=0.016,
         win_w=1280.0,
         win_h=720.0,
-        infl_r=240.0,
-        max_spd=800.0,
-        curv_ref=400.0,
-        base_damp=0.985,
+        infl_r=320.0,
+        orbit_r=92.0,
+        base_damp=0.973,
     )
     _particle_physics_kernel(**_warm_kwargs)
     print("OK")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="演卦 · 星尘太极")
+    parser = argparse.ArgumentParser(description="演卦 · 双生涡场")
     parser.add_argument(
         "--video",
         metavar="PATH",

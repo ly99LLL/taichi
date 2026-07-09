@@ -1,124 +1,125 @@
-"""测试粒子物理模块 — 验证 CloudParticles + Taichi kernel。"""
+"""常驻尘场与 Taichi 涡旋 kernel 测试。"""
 
 import numpy as np
 import pytest
 import taichi as ti
 
-# Taichi 必须在导入 physics 前初始化
 ti.init(arch=ti.cpu, random_seed=42)
 
 pytestmark = pytest.mark.physics
 
 
+def vortex(
+    slot=0,
+    position=(640.0, 360.0),
+    coherence=1.0,
+    scatter=0.0,
+):
+    return {
+        "slot": slot,
+        "position": np.array(position, dtype=np.float32),
+        "velocity": np.zeros(2, dtype=np.float32),
+        "strength": 1.0,
+        "coherence": coherence,
+        "scatter": scatter,
+        "release": 0.0,
+        "maturity": 1.0,
+        "aperture": 0.0,
+        "spin": 1.0 if slot == 0 else -1.0,
+        "active": True,
+        "observed": True,
+        "phase": "holding",
+    }
+
+
 def test_cloud_particles_init():
-    """CloudParticles 初始化应创建正确数量的粒子。"""
     from yan_gua.physics import CloudParticles
 
-    cp = CloudParticles(count=500, win_w=1280, win_h=720)
-    assert cp.c == 500
-    assert len(cp.px) == 500
-    assert len(cp.py) == 500
-    assert len(cp.vx) == 500
-    assert len(cp.alpha) == 500
-    assert len(cp.ink_level) == 500
-    # 所有粒子应在屏幕范围内
-    assert np.all(cp.px >= 0) and np.all(cp.px <= 1280)
-    assert np.all(cp.py >= 0) and np.all(cp.py <= 720)
+    cloud = CloudParticles(count=500, win_w=1280, win_h=720, seed=1)
+    assert cloud.c == 500
+    assert len(cloud.px) == 500
+    assert np.all((cloud.px >= 0) & (cloud.px <= 1280))
+    assert np.all((cloud.py >= 0) & (cloud.py <= 720))
+    assert np.all(cloud.base_alpha > 0)
 
 
-def test_cloud_particles_update_no_hands():
-    """无手时粒子物理更新不应崩溃。"""
+def test_cloud_particles_update_no_vortices():
     from yan_gua.physics import CloudParticles
 
-    cp = CloudParticles(count=500, win_w=1280, win_h=720)
-    px_before = cp.px.copy()
-    py_before = cp.py.copy()
+    cloud = CloudParticles(count=500, win_w=1280, win_h=720, seed=2)
+    before = np.column_stack((cloud.px.copy(), cloud.py.copy()))
+    cloud.update(0.016, [])
+    after = np.column_stack((cloud.px, cloud.py))
 
-    cp.update(0.016, [])
-
-    # 粒子应有漂移 (位置变化)
-    assert not np.allclose(cp.px, px_before)
-    assert not np.allclose(cp.py, py_before)
+    assert not np.allclose(after, before)
+    assert np.isfinite(after).all()
 
 
-def test_cloud_particles_update_with_hand():
-    """有手时粒子应对手势产生响应。"""
+def test_coherent_vortex_organises_and_brightens_nearby_dust():
     from yan_gua.physics import CloudParticles
 
-    cp = CloudParticles(count=500, win_w=1280, win_h=720)
+    cloud = CloudParticles(count=500, win_w=1280, win_h=720, seed=3)
+    # 把一部分尘埃放在目标轨道附近，使测试关注确定性的场响应。
+    angles = np.linspace(0, np.pi * 2, 120, endpoint=False)
+    cloud.px[:120] = 640 + np.cos(angles) * 92
+    cloud.py[:120] = 360 + np.sin(angles) * 92
+    alpha_before = float(cloud.alpha[:120].mean())
 
-    # 单手, 居中, 快速移动
-    hand_pos = np.array([640.0, 360.0], dtype=np.float32)
-    feat = {
-        "speed": 200.0,
-        "curvature": 0.1,
-        "z_velocity": 10.0,
-        "hand_velocity": np.array([50.0, 20.0], dtype=np.float32),
-        "hand_detected": True,
-    }
-    hands = [(hand_pos, feat)]
+    for _ in range(20):
+        cloud.update(1 / 60, [vortex()])
 
-    cp.update(0.016, hands)
-    # 不应崩溃, 粒子应有合理的值
-    assert not np.any(np.isnan(cp.px))
-    assert not np.any(np.isnan(cp.py))
-    assert not np.any(np.isnan(cp.vx))
+    assert float(cloud.alpha[:120].mean()) > alpha_before + 5
+    assert np.isfinite(cloud.vx).all()
+    assert np.isfinite(cloud.vy).all()
 
 
-def test_cloud_particles_two_hands():
-    """双手叠加不应崩溃。"""
+def test_two_vortices_pack_into_fixed_identity_slots():
     from yan_gua.physics import CloudParticles
 
-    cp = CloudParticles(count=500, win_w=1280, win_h=720)
-
-    feat = {
-        "speed": 100.0,
-        "curvature": 0.05,
-        "z_velocity": 5.0,
-        "hand_velocity": np.array([10.0, 5.0], dtype=np.float32),
-        "hand_detected": True,
-    }
-    hands = [
-        (np.array([400.0, 360.0], dtype=np.float32), feat),
-        (np.array([880.0, 360.0], dtype=np.float32), feat),
+    cloud = CloudParticles(count=200, win_w=1280, win_h=720, seed=4)
+    fields = [
+        vortex(slot=0, position=(420.0, 360.0)),
+        vortex(slot=1, position=(860.0, 360.0)),
     ]
+    cloud.update(0.016, fields)
 
-    cp.update(0.016, hands)
-    assert not np.any(np.isnan(cp.px))
-    assert not np.any(np.isnan(cp.py))
+    assert cloud._hactive.tolist() == [1, 1]
+    assert cloud._hspin.tolist() == [1.0, -1.0]
+    assert np.isfinite(cloud.px).all()
 
 
 def test_physics_kernel_warmup():
-    """GPU kernel 预热应成功编译。"""
     from yan_gua.physics import _particle_physics_kernel
 
-    n_warm = 100
+    count = 100
     _particle_physics_kernel(
-        px=np.random.uniform(0, 1280, n_warm).astype(np.float32),
-        py=np.random.uniform(0, 720, n_warm).astype(np.float32),
-        vx=np.zeros(n_warm, dtype=np.float32),
-        vy=np.zeros(n_warm, dtype=np.float32),
-        alpha=np.full(n_warm, 5.0, dtype=np.float32),
-        radius=np.full(n_warm, 10.0, dtype=np.float32),
-        ink_level=np.zeros(n_warm, dtype=np.int32),
-        base_alpha=np.full(n_warm, 5.0, dtype=np.float32),
-        base_radius=np.full(n_warm, 10.0, dtype=np.float32),
-        base_ink=np.zeros(n_warm, dtype=np.int32),
+        px=np.random.uniform(0, 1280, count).astype(np.float32),
+        py=np.random.uniform(0, 720, count).astype(np.float32),
+        vx=np.zeros(count, dtype=np.float32),
+        vy=np.zeros(count, dtype=np.float32),
+        alpha=np.full(count, 5.0, dtype=np.float32),
+        radius=np.full(count, 2.0, dtype=np.float32),
+        ink_level=np.zeros(count, dtype=np.int32),
+        base_alpha=np.full(count, 5.0, dtype=np.float32),
+        base_radius=np.full(count, 2.0, dtype=np.float32),
+        base_ink=np.zeros(count, dtype=np.int32),
         hx_arr=np.array([640.0, 0.0], dtype=np.float32),
         hy_arr=np.array([360.0, 0.0], dtype=np.float32),
         hvx_arr=np.zeros(2, dtype=np.float32),
         hvy_arr=np.zeros(2, dtype=np.float32),
-        hspd_arr=np.array([50.0, 0.0], dtype=np.float32),
-        hcurv_arr=np.zeros(2, dtype=np.float32),
-        hzvel_arr=np.zeros(2, dtype=np.float32),
+        hstrength_arr=np.array([1.0, 0.0], dtype=np.float32),
+        hcoherence_arr=np.array([1.0, 0.0], dtype=np.float32),
+        hscatter_arr=np.zeros(2, dtype=np.float32),
+        hrelease_arr=np.zeros(2, dtype=np.float32),
+        hmaturity_arr=np.array([1.0, 0.0], dtype=np.float32),
+        haperture_arr=np.zeros(2, dtype=np.float32),
+        hspin_arr=np.array([1.0, -1.0], dtype=np.float32),
         hactive_arr=np.array([1, 0], dtype=np.int32),
         dt=0.016,
         win_w=1280.0,
         win_h=720.0,
-        infl_r=240.0,
-        max_spd=800.0,
-        curv_ref=400.0,
-        base_damp=0.985,
+        infl_r=320.0,
+        orbit_r=92.0,
+        base_damp=0.973,
     )
-    # 如果成功返回 (无异常), kernel 已编译
     assert True

@@ -1,19 +1,19 @@
 [build-system]
-requires = ["setuptools>=75"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "yan-gua"
-version = "3.0.1"
-description = "太极手势驱动的星尘粒子实时交互系统"
+version = "4.0.0"
+description = "双手驱动的实时星尘涡场交互系统"
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
-license = { file = "LICENSE" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "ly99LLL" }]
 keywords = ["taichi", "mediapipe", "generative-art", "computer-vision", "py5"]
 classifiers = [
     "Development Status :: 4 - Beta",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Artistic Software",

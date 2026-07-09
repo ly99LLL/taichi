@@ -49,6 +49,8 @@ def test_pose_wrist_is_used_as_fallback():
     assert returned_pose is pose
     assert hands == [
         {
+            "id_hint": "Left",
+            "id_confidence": 0.9,
             "palm_center": {"x": 0.3, "y": 0.4, "z": -0.2},
             "landmarks": [],
         }

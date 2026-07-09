@@ -35,3 +35,32 @@ def test_landmark_pixels_are_clamped():
         80,
     )
     assert pixels == [(0, 79), (50, 20)]
+
+
+def test_color_grade_preserves_original_hue_and_brightness():
+    """原彩模式只能轻调，不得把彩色画面变成冷灰。"""
+    frame = np.empty((20, 20, 3), dtype=np.uint8)
+    frame[:] = (32, 96, 220)
+
+    output = CameraRenderer._preserve_color(frame)
+    original = frame[10, 10].astype(int)
+    graded = output[10, 10].astype(int)
+
+    assert int(np.argmax(graded)) == int(np.argmax(original))
+    assert np.max(np.abs(graded - original)) < 12
+
+
+def test_pose_fallback_palm_still_gets_recognition_orbit():
+    """只有腕部降级点时也应显示掌心识别环。"""
+    renderer = CameraRenderer(cam_w=100, cam_h=80)
+    frame = np.full((80, 100, 3), (60, 110, 170), dtype=np.uint8)
+    hand = {
+        "id_hint": "Right",
+        "palm_center": {"x": 0.5, "y": 0.5, "z": 0.0},
+        "landmarks": [],
+    }
+
+    baseline = renderer._vignette(renderer._preserve_color(frame))
+    with_effect = renderer._draw_hand_effect(baseline.copy(), [hand])
+
+    assert not np.array_equal(with_effect[28:53, 38:63], baseline[28:53, 38:63])

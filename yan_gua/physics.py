@@ -1,34 +1,36 @@
-"""(GPU) 粒子物理引擎 — Taichi CUDA kernel + CloudParticles 管理类.
+"""双生涡场粒子引擎 — Taichi 并行物理 + py5 渲染。
 
-六大物理力: 中空推力 / 环壁拉力 / 粘性拖拽 / 飞溅 / 漩涡 / 呼吸。
+慢手把背景尘埃组织成稳定轨道；快手降低相干性并产生径向剪切。检测丢失
+时涡场继续以余涡形态衰减，因此粒子的去向始终连续。
 """
 
 import numpy as np
 import taichi as ti
 
 from yan_gua.config import (
+    AMBIENT_DRIFT,
     BASE_DAMPING,
-    CENTER_GRAVITY,
-    CURVATURE_REF,
-    HAND_FORCE_MULTIPLIER,
-    INFLUENCE_RADIUS,
+    COHERENT_COLOR,
+    ECHO_COLOR,
     INK_COLORS,
-    MAX_SPEED,
     NUM_INK_LEVELS,
+    PARTICLE_ALPHA_MAX,
+    PARTICLE_ALPHA_MIN,
     PARTICLE_COUNT,
-    WARM_LIGHT,
+    PARTICLE_SIZE_MAX,
+    PARTICLE_SIZE_MIN,
+    SCATTER_COLOR,
+    VORTEX_INFLUENCE_RADIUS,
+    VORTEX_ORBIT_RADIUS,
+    VORTEX_ORBIT_SPEED,
+    VORTEX_PAIR_DISTANCE,
     WINDOW_H,
     WINDOW_W,
 )
 
-# ============================================================
-# Taichi GPU Kernel — 粒子物理
-# ============================================================
-
 
 @ti.kernel
 def _particle_physics_kernel(
-    # 粒子状态 (原地修改)
     px: ti.types.ndarray(dtype=ti.f32, ndim=1),
     py: ti.types.ndarray(dtype=ti.f32, ndim=1),
     vx: ti.types.ndarray(dtype=ti.f32, ndim=1),
@@ -36,265 +38,249 @@ def _particle_physics_kernel(
     alpha: ti.types.ndarray(dtype=ti.f32, ndim=1),
     radius: ti.types.ndarray(dtype=ti.f32, ndim=1),
     ink_level: ti.types.ndarray(dtype=ti.i32, ndim=1),
-    # 基准状态 (只读)
     base_alpha: ti.types.ndarray(dtype=ti.f32, ndim=1),
     base_radius: ti.types.ndarray(dtype=ti.f32, ndim=1),
     base_ink: ti.types.ndarray(dtype=ti.i32, ndim=1),
-    # 手部数据 (最多 2 只手, 未使用的填 0)
     hx_arr: ti.types.ndarray(dtype=ti.f32, ndim=1),
     hy_arr: ti.types.ndarray(dtype=ti.f32, ndim=1),
     hvx_arr: ti.types.ndarray(dtype=ti.f32, ndim=1),
     hvy_arr: ti.types.ndarray(dtype=ti.f32, ndim=1),
-    hspd_arr: ti.types.ndarray(dtype=ti.f32, ndim=1),
-    hcurv_arr: ti.types.ndarray(dtype=ti.f32, ndim=1),
-    hzvel_arr: ti.types.ndarray(dtype=ti.f32, ndim=1),
+    hstrength_arr: ti.types.ndarray(dtype=ti.f32, ndim=1),
+    hcoherence_arr: ti.types.ndarray(dtype=ti.f32, ndim=1),
+    hscatter_arr: ti.types.ndarray(dtype=ti.f32, ndim=1),
+    hrelease_arr: ti.types.ndarray(dtype=ti.f32, ndim=1),
+    hmaturity_arr: ti.types.ndarray(dtype=ti.f32, ndim=1),
+    haperture_arr: ti.types.ndarray(dtype=ti.f32, ndim=1),
+    hspin_arr: ti.types.ndarray(dtype=ti.f32, ndim=1),
     hactive_arr: ti.types.ndarray(dtype=ti.i32, ndim=1),
-    # 全局参数
     dt: ti.f32,
     win_w: ti.f32,
     win_h: ti.f32,
     infl_r: ti.f32,
-    max_spd: ti.f32,
-    curv_ref: ti.f32,
+    orbit_r: ti.f32,
     base_damp: ti.f32,
 ):
-    """GPU 并行粒子物理: 环境力 + 双手手势力 + 视觉响应 + 位置积分.
-
-    每个 GPU 线程处理一个粒子, 6000 粒子完全并行。
-    """
+    """推进背景尘场、两个涡旋和双手之间的流桥。"""
     for i in range(px.shape[0]):
-        # ---- 环境: 有机漂移 ----
-        vx[i] += (ti.random(dtype=ti.f32) * 1.2 - 0.6) * dt
-        vy[i] += (ti.random(dtype=ti.f32) * 1.2 - 0.6) * dt
+        # 背景不是静止的库存，而是一层几乎不可见的缓慢尘流。
+        vx[i] += (ti.random(dtype=ti.f32) * 2.0 - 1.0) * AMBIENT_DRIFT * dt
+        vy[i] += (ti.random(dtype=ti.f32) * 2.0 - 1.0) * AMBIENT_DRIFT * dt
 
-        # 弱中心引力
-        cx_m = win_w * 0.5
-        cy_m = win_h * 0.5
-        vx[i] -= (px[i] - cx_m) * CENTER_GRAVITY
-        vy[i] -= (py[i] - cy_m) * CENTER_GRAVITY
+        visual_signal = 0.0
+        visual_coherence = 0.0
+        visual_scatter = 0.0
+        visual_release = 0.0
 
-        influenced = ti.i32(0)
-
-        # ---- 双手手势影响 (叠加) ----
         for h in ti.static(range(2)):
             if hactive_arr[h] == 1:
-                _apply_hand_force(
-                    i,
-                    h,
-                    px,
-                    py,
-                    vx,
-                    vy,
-                    alpha,
-                    radius,
-                    ink_level,
-                    base_alpha,
-                    base_radius,
-                    hx_arr,
-                    hy_arr,
-                    hvx_arr,
-                    hvy_arr,
-                    hspd_arr,
-                    hcurv_arr,
-                    hzvel_arr,
-                    infl_r,
-                    max_spd,
-                )
-                # 检查该粒子是否在手的影响范围内
                 dx = px[i] - hx_arr[h]
                 dy = py[i] - hy_arr[h]
-                dist = ti.sqrt(dx * dx + dy * dy)
-                if dist < infl_r:
-                    influenced = 1
+                dist = ti.sqrt(dx * dx + dy * dy) + 0.001
+                reach = infl_r * (1.0 + hrelease_arr[h] * 0.35)
 
-        # ---- 不受影响 → 回归基态 ----
-        if influenced == 0:
-            alpha[i] += (base_alpha[i] - alpha[i]) * 0.03
-            radius[i] += (base_radius[i] - radius[i]) * 0.02
+                if dist < reach:
+                    normal_x = dx / dist
+                    normal_y = dy / dist
+                    tangent_x = -normal_y * hspin_arr[h]
+                    tangent_y = normal_x * hspin_arr[h]
+                    unit_distance = 1.0 - dist / reach
+                    falloff = unit_distance * unit_distance * (3.0 - 2.0 * unit_distance)
+
+                    ring_radius = orbit_r * (1.0 + hrelease_arr[h] * 0.9 + haperture_arr[h])
+                    ring_width = ring_radius * (0.32 + hscatter_arr[h] * 0.55)
+                    ring_band = ti.exp(-ti.abs(dist - ring_radius) / (ring_width + 0.001))
+
+                    maturity_gain = 0.28 + hmaturity_arr[h] * 0.72
+                    coherent = hstrength_arr[h] * hcoherence_arr[h] * maturity_gain
+                    scattered = hstrength_arr[h] * hscatter_arr[h]
+
+                    # 相干涡旋：将速度连续牵引到切向轨道，而不是直接推开粒子。
+                    orbit_speed = (
+                        VORTEX_ORBIT_SPEED
+                        * (0.58 + ring_band * 0.42)
+                        * (1.0 + haperture_arr[h] * 0.18)
+                    )
+                    target_vx = tangent_x * orbit_speed + hvx_arr[h] * 0.08
+                    target_vy = tangent_y * orbit_speed + hvy_arr[h] * 0.08
+                    steering = coherent * falloff * (1.8 + ring_band * 2.4)
+                    vx[i] += (target_vx - vx[i]) * steering * dt
+                    vy[i] += (target_vy - vy[i]) * steering * dt
+
+                    # 空心轨道：环外向内收，环内向外托住，掌心保持安静。
+                    ring_error = ti.math.clamp(
+                        (dist - ring_radius) * 3.2,
+                        -230.0,
+                        330.0,
+                    )
+                    radial_gain = hstrength_arr[h] * (0.22 + hcoherence_arr[h] * 0.78)
+                    vx[i] -= normal_x * ring_error * radial_gain * falloff * dt
+                    vy[i] -= normal_y * ring_error * radial_gain * falloff * dt
+
+                    # 快手不制造新涡旋，而是把现有轨道剪碎、吹散。
+                    burst = scattered * falloff * (0.35 + ring_band * 0.65)
+                    turbulence_x = ti.random(dtype=ti.f32) * 2.0 - 1.0
+                    turbulence_y = ti.random(dtype=ti.f32) * 2.0 - 1.0
+                    vx[i] += (normal_x * 520.0 * burst + turbulence_x * 145.0 * burst) * dt
+                    vy[i] += (normal_y * 520.0 * burst + turbulence_y * 145.0 * burst) * dt
+
+                    # 余涡解束时轨道扩大并轻轻向外释放。
+                    release_force = hstrength_arr[h] * hrelease_arr[h] * falloff * 95.0
+                    vx[i] += normal_x * release_force * dt
+                    vy[i] += normal_y * release_force * dt
+
+                    signal = (
+                        hstrength_arr[h]
+                        * falloff
+                        * (
+                            hcoherence_arr[h] * ring_band
+                            + hscatter_arr[h] * 0.42
+                            + (1.0 - hrelease_arr[h]) * 0.08
+                        )
+                    )
+                    if signal > visual_signal:
+                        visual_signal = signal
+                        visual_coherence = hcoherence_arr[h]
+                        visual_scatter = hscatter_arr[h]
+                        visual_release = hrelease_arr[h]
+
+        # 两只相干涡旋靠近时，粒子沿中轴形成一条轻微的 ∞ 形流桥。
+        if hactive_arr[0] == 1 and hactive_arr[1] == 1:
+            pair_dx = hx_arr[1] - hx_arr[0]
+            pair_dy = hy_arr[1] - hy_arr[0]
+            pair_dist = ti.sqrt(pair_dx * pair_dx + pair_dy * pair_dy) + 0.001
+            if pair_dist > orbit_r * 1.5 and pair_dist < VORTEX_PAIR_DISTANCE:
+                axis_x = pair_dx / pair_dist
+                axis_y = pair_dy / pair_dist
+                local_x = px[i] - hx_arr[0]
+                local_y = py[i] - hy_arr[0]
+                projection = ti.math.clamp(
+                    local_x * axis_x + local_y * axis_y,
+                    0.0,
+                    pair_dist,
+                )
+                nearest_x = hx_arr[0] + axis_x * projection
+                nearest_y = hy_arr[0] + axis_y * projection
+                bridge_dx = px[i] - nearest_x
+                bridge_dy = py[i] - nearest_y
+                bridge_dist = ti.sqrt(bridge_dx * bridge_dx + bridge_dy * bridge_dy) + 0.001
+                bridge_width = orbit_r * 0.72
+
+                if bridge_dist < bridge_width:
+                    center_weight = ti.sin(3.14159265 * projection / pair_dist)
+                    bridge_weight = (
+                        ti.min(hstrength_arr[0], hstrength_arr[1])
+                        * ti.min(hcoherence_arr[0], hcoherence_arr[1])
+                        * center_weight
+                        * (1.0 - bridge_dist / bridge_width)
+                    )
+                    bridge_nx = bridge_dx / bridge_dist
+                    bridge_ny = bridge_dy / bridge_dist
+                    vx[i] -= bridge_nx * bridge_dist * 5.5 * bridge_weight * dt
+                    vy[i] -= bridge_ny * bridge_dist * 5.5 * bridge_weight * dt
+                    vx[i] += -axis_y * hspin_arr[0] * 75.0 * bridge_weight * dt
+                    vy[i] += axis_x * hspin_arr[0] * 75.0 * bridge_weight * dt
+                    if bridge_weight * 0.7 > visual_signal:
+                        visual_signal = bridge_weight * 0.7
+                        visual_coherence = 1.0
+                        visual_scatter = 0.0
+                        visual_release = 0.0
+
+        # 可见度来自“被组织起来”，不是粒子的出生。
+        if visual_signal > 0.001:
+            target_alpha = base_alpha[i] + visual_signal * (30.0 + visual_coherence * 54.0)
+            target_radius = base_radius[i] + visual_signal * (0.7 + visual_coherence * 2.7)
+            alpha[i] += (target_alpha - alpha[i]) * ti.min(dt * 8.0, 1.0)
+            radius[i] += (target_radius - radius[i]) * ti.min(dt * 7.0, 1.0)
+
+            if visual_release > 0.35:
+                ink_level[i] = 0 + i % 3
+            elif visual_scatter > visual_coherence:
+                ink_level[i] = 3 + i % 2
+            elif visual_coherence > 0.55:
+                ink_level[i] = 5 + i % 2
+        else:
+            alpha[i] += (base_alpha[i] - alpha[i]) * ti.min(dt * 2.4, 1.0)
+            radius[i] += (base_radius[i] - radius[i]) * ti.min(dt * 2.1, 1.0)
             ink_level[i] = base_ink[i]
 
-        # ---- 位置积分 ----
-        px[i] += vx[i] * dt * 80.0
-        py[i] += vy[i] * dt * 80.0
+        speed_sq = vx[i] * vx[i] + vy[i] * vy[i]
+        if speed_sq > 700.0 * 700.0:
+            speed_scale = 700.0 / ti.sqrt(speed_sq)
+            vx[i] *= speed_scale
+            vy[i] *= speed_scale
 
-        # ---- 阻尼 ----
-        vx[i] *= base_damp
-        vy[i] *= base_damp
+        px[i] += vx[i] * dt
+        py[i] += vy[i] * dt
+        damping = ti.pow(base_damp, dt * 60.0)
+        vx[i] *= damping
+        vy[i] *= damping
 
-        # ---- 屏幕环绕 ----
-        if px[i] < -50.0:
-            px[i] = win_w + 50.0
-        if px[i] > win_w + 50.0:
-            px[i] = -50.0
-        if py[i] < -50.0:
-            py[i] = win_h + 50.0
-        if py[i] > win_h + 50.0:
-            py[i] = -50.0
-
-
-@ti.func
-def _apply_hand_force(
-    i: ti.i32,
-    h: ti.i32,
-    px: ti.types.ndarray(dtype=ti.f32, ndim=1),
-    py: ti.types.ndarray(dtype=ti.f32, ndim=1),
-    vx: ti.types.ndarray(dtype=ti.f32, ndim=1),
-    vy: ti.types.ndarray(dtype=ti.f32, ndim=1),
-    alpha: ti.types.ndarray(dtype=ti.f32, ndim=1),
-    radius: ti.types.ndarray(dtype=ti.f32, ndim=1),
-    ink_level: ti.types.ndarray(dtype=ti.i32, ndim=1),
-    base_alpha: ti.types.ndarray(dtype=ti.f32, ndim=1),
-    base_radius: ti.types.ndarray(dtype=ti.f32, ndim=1),
-    hx_arr: ti.types.ndarray(dtype=ti.f32, ndim=1),
-    hy_arr: ti.types.ndarray(dtype=ti.f32, ndim=1),
-    hvx_arr: ti.types.ndarray(dtype=ti.f32, ndim=1),
-    hvy_arr: ti.types.ndarray(dtype=ti.f32, ndim=1),
-    hspd_arr: ti.types.ndarray(dtype=ti.f32, ndim=1),
-    hcurv_arr: ti.types.ndarray(dtype=ti.f32, ndim=1),
-    hzvel_arr: ti.types.ndarray(dtype=ti.f32, ndim=1),
-    infl_r: ti.f32,
-    max_spd: ti.f32,
-):
-    """对单个粒子施加一只手的所有力: 中空推力/环壁拉力/粘性/飞溅/漩涡/呼吸 + 视觉响应。"""
-    hx = hx_arr[h]
-    hy = hy_arr[h]
-    dx = px[i] - hx
-    dy = py[i] - hy
-    dist = ti.sqrt(dx * dx + dy * dy)
-
-    if dist < infl_r:
-        # ---- 距离衰减 (smoothstep) ----
-        t_val = 1.0 - dist / infl_r
-        falloff = t_val * t_val * (3.0 - 2.0 * t_val)
-
-        # 径向单位向量
-        rnx = dx / (dist + 0.001)
-        rny = dy / (dist + 0.001)
-
-        # 运动特征
-        nspd = ti.math.clamp(hspd_arr[h] / max_spd, 0.0, 1.0)
-        visc = 1.0 - nspd  # 慢 = 粘稠, 快 = 稀薄
-        hvx = hvx_arr[h]
-        hvy = hvy_arr[h]
-
-        # ---- 六大物理力 ----
-
-        # 1. 中空推力 (0-25%): 粒子向外猛推 → 掌心虚空
-        if dist < infl_r * 0.25:
-            push = falloff * (8.0 + visc * 6.0) * HAND_FORCE_MULTIPLIER
-            vx[i] += rnx * push
-            vy[i] += rny * push
-
-        # 2. 环壁拉力 (25-40%): 轻吸维持边界 → 漩涡环
-        if dist >= infl_r * 0.25 and dist < infl_r * 0.4:
-            attract = falloff * (0.8 + visc * 1.5) * HAND_FORCE_MULTIPLIER
-            vx[i] -= rnx * attract
-            vy[i] -= rny * attract
-
-        # 3. 粘性拖拽: 手慢 → 粒子跟随手流动
-        vx[i] += hvx * falloff * visc * 0.08 * HAND_FORCE_MULTIPLIER
-        vy[i] += hvy * falloff * visc * 0.08 * HAND_FORCE_MULTIPLIER
-
-        # 4. 飞溅: 手快 → 粒子向外迸裂
-        vx[i] += rnx * falloff * nspd * 2.5 * HAND_FORCE_MULTIPLIER
-        vy[i] += rny * falloff * nspd * 2.5 * HAND_FORCE_MULTIPLIER
-
-        # 5. 漩涡: 基线旋转 + 曲率叠加 → 画弧时更猛
-        tx = -rny
-        ty = rnx
-        vortex_f = visc * 3.0 + hcurv_arr[h] * (3.0 + visc * 10.0)
-        vx[i] += tx * falloff * vortex_f * HAND_FORCE_MULTIPLIER
-        vy[i] += ty * falloff * vortex_f * HAND_FORCE_MULTIPLIER
-
-        # 6. 呼吸: 纵深位移 → 膨胀/收缩
-        breath = hzvel_arr[h] * 0.6
-        vx[i] += rnx * falloff * breath * HAND_FORCE_MULTIPLIER
-        vy[i] += rny * falloff * breath * HAND_FORCE_MULTIPLIER
-
-        # ---- 视觉响应 ----
-        activity = ti.math.clamp(
-            nspd * 0.4 + hcurv_arr[h] * 2.0 + ti.abs(hzvel_arr[h]) * 0.003,
-            0.0,
-            1.0,
-        )
-
-        # 透明度: 在基准亮度上增亮，避免扰动时反而变暗
-        if activity > 0.15:
-            target_alpha = base_alpha[i] + 42.0 * activity * falloff
-            alpha[i] += (target_alpha - alpha[i]) * 0.2
-        else:
-            alpha[i] += (base_alpha[i] - alpha[i]) * 0.2
-
-        # 半径: 限制膨胀，避免大圆叠加成混沌色块
-        if activity > 0.1:
-            target_radius = base_radius[i] + falloff * 6.0 * activity
-            radius[i] += (target_radius - radius[i]) * 0.2
-        else:
-            radius[i] += (base_radius[i] - radius[i]) * 0.2
-
-        # 环带粒子额外增亮 → 漩涡环可见
-        in_ring = dist >= infl_r * 0.25 and dist < infl_r * 0.4
-        if in_ring and activity > 0.15:
-            alpha[i] = ti.min(alpha[i] + 5.0, 72.0)
-            radius[i] = ti.min(radius[i] + 1.0, 11.0)
-
-
-# ============================================================
-# 粒子云气 (Taichi GPU 物理 + py5 渲染)
-# ============================================================
+        margin = 42.0
+        if px[i] < -margin:
+            px[i] = win_w + margin
+        if px[i] > win_w + margin:
+            px[i] = -margin
+        if py[i] < -margin:
+            py[i] = win_h + margin
+        if py[i] > win_h + margin:
+            py[i] = -margin
 
 
 class CloudParticles:
-    """6000 粒子系统。Taichi CUDA kernel 处理物理, py5 OpenGL 渲染。"""
+    """常驻尘场；涡旋只组织粒子，不负责生成粒子。"""
 
-    def __init__(self, count=PARTICLE_COUNT, win_w=WINDOW_W, win_h=WINDOW_H):
+    def __init__(
+        self,
+        count: int = PARTICLE_COUNT,
+        win_w: int = WINDOW_W,
+        win_h: int = WINDOW_H,
+        seed: int | None = None,
+    ):
         self.c = count
         self.win_w = win_w
         self.win_h = win_h
-        rng = np.random.default_rng()
+        rng = np.random.default_rng(seed)
 
-        # 位置 (屏幕空间均匀分布)
         self.px = rng.uniform(0, win_w, count).astype(np.float32)
         self.py = rng.uniform(0, win_h, count).astype(np.float32)
-
-        # 速度
-        self.vx = rng.uniform(-0.5, 0.5, count).astype(np.float32)
-        self.vy = rng.uniform(-0.5, 0.5, count).astype(np.float32)
-
-        # 视觉属性
-        self.alpha = rng.uniform(10, 24, count).astype(np.float32)
-        self.radius = rng.uniform(1.8, 5.2, count).astype(np.float32)
+        self.vx = rng.uniform(-12.0, 12.0, count).astype(np.float32)
+        self.vy = rng.uniform(-12.0, 12.0, count).astype(np.float32)
+        self.alpha = rng.uniform(
+            PARTICLE_ALPHA_MIN,
+            PARTICLE_ALPHA_MAX,
+            count,
+        ).astype(np.float32)
+        self.radius = rng.uniform(
+            PARTICLE_SIZE_MIN,
+            PARTICLE_SIZE_MAX,
+            count,
+        ).astype(np.float32)
         self.ink_level = rng.choice(
             NUM_INK_LEVELS,
             count,
-            p=[0.16, 0.14, 0.13, 0.12, 0.11, 0.13, 0.12, 0.09],
+            p=[0.20, 0.18, 0.17, 0.12, 0.08, 0.07, 0.10, 0.08],
         ).astype(np.int32)
 
-        # 基准状态 (不受手影响时的回归目标)
         self.base_alpha = self.alpha.copy()
         self.base_radius = self.radius.copy()
         self.base_ink = self.ink_level.copy()
 
-        # 手部数据打包缓冲 (GPU 传输用, 2 手 x 7 特征)
         self._hx = np.zeros(2, dtype=np.float32)
         self._hy = np.zeros(2, dtype=np.float32)
         self._hvx = np.zeros(2, dtype=np.float32)
         self._hvy = np.zeros(2, dtype=np.float32)
-        self._hspd = np.zeros(2, dtype=np.float32)
-        self._hcurv = np.zeros(2, dtype=np.float32)
-        self._hzvel = np.zeros(2, dtype=np.float32)
+        self._hstrength = np.zeros(2, dtype=np.float32)
+        self._hcoherence = np.zeros(2, dtype=np.float32)
+        self._hscatter = np.zeros(2, dtype=np.float32)
+        self._hrelease = np.ones(2, dtype=np.float32)
+        self._hmaturity = np.zeros(2, dtype=np.float32)
+        self._haperture = np.zeros(2, dtype=np.float32)
+        self._hspin = np.array([1.0, -1.0], dtype=np.float32)
         self._hactive = np.zeros(2, dtype=np.int32)
 
-    def update(self, dt, hands):
-        """打包手部数据 → GPU kernel → 原地更新粒子状态。
-
-        Args:
-            dt: 帧间隔时间 (秒), 自动 clamp 到 0.1s。
-            hands: [(pos_2d, features_dict), ...] — 双手独立施加影响力。
-        """
-        dt = min(dt, 0.1)
-        self._pack_hand_data(hands)
-
+    def update(self, dt: float, vortices: list[dict]) -> None:
+        dt = min(max(float(dt), 0.0), 0.1)
+        self._pack_vortices(vortices)
         _particle_physics_kernel(
             self.px,
             self.py,
@@ -310,85 +296,115 @@ class CloudParticles:
             self._hy,
             self._hvx,
             self._hvy,
-            self._hspd,
-            self._hcurv,
-            self._hzvel,
+            self._hstrength,
+            self._hcoherence,
+            self._hscatter,
+            self._hrelease,
+            self._hmaturity,
+            self._haperture,
+            self._hspin,
             self._hactive,
             dt,
             float(self.win_w),
             float(self.win_h),
-            float(INFLUENCE_RADIUS),
-            float(MAX_SPEED),
-            float(CURVATURE_REF),
+            float(VORTEX_INFLUENCE_RADIUS),
+            float(VORTEX_ORBIT_RADIUS),
             float(BASE_DAMPING),
         )
 
-    def draw(self, has_hand, hand_x, hand_y):
-        """逐粒子渲染: 墨韵软圆 + 多层叠加。
-
-        py5 GPU 渲染, 按 alpha 排序实现深度感 (暗粒子在下, 亮粒子在上)。
-        """
-        import py5  # 延迟导入: 仅在渲染时需要 py5/JVM
+    def draw(self, vortices: list[dict]) -> None:
+        """按亮度排序渲染；高能粒子有一层克制的光晕。"""
+        import py5
 
         py5.no_stroke()
         py5.blend_mode(py5.BLEND)
-
-        # 按透明度排序: 远/暗粒子先画, 近/亮粒子后画
         order = np.argsort(self.alpha)
 
-        for j in range(self.c):
-            idx = order[j]
-            a = self.alpha[idx]
-            if a < 1.0:
+        for idx in order:
+            particle_alpha = float(self.alpha[idx])
+            if particle_alpha < 1.0:
                 continue
 
-            r = self.radius[idx]
-            ink = self.ink_level[idx]
-            cr, cg, cb = INK_COLORS[min(ink, NUM_INK_LEVELS - 1)]
+            ink = min(int(self.ink_level[idx]), NUM_INK_LEVELS - 1)
+            color = INK_COLORS[ink]
+            color = self.tint_color(
+                color,
+                float(self.px[idx]),
+                float(self.py[idx]),
+                vortices,
+            )
+            particle_radius = float(self.radius[idx])
 
-            # 手部附近混入暖金色
-            if has_hand and hand_x is not None:
-                cr, cg, cb = self._blend_warm(
-                    cr,
-                    cg,
-                    cb,
+            if particle_alpha > 42.0:
+                py5.fill(*color, min(particle_alpha * 0.12, 16.0))
+                py5.circle(
                     self.px[idx],
                     self.py[idx],
-                    hand_x,
-                    hand_y,
+                    particle_radius * 3.4,
                 )
 
-            py5.fill(cr, cg, cb, min(a, 255))
-            py5.circle(self.px[idx], self.py[idx], r * 2)
+            py5.fill(*color, min(particle_alpha, 150.0))
+            py5.circle(
+                self.px[idx],
+                self.py[idx],
+                particle_radius * 2.0,
+            )
 
-    # ---- 内部方法 ----
+    def _pack_vortices(self, vortices: list[dict]) -> None:
+        self._hactive.fill(0)
+        for field in vortices:
+            slot = int(field.get("slot", 0))
+            if slot < 0 or slot >= 2 or not field.get("active"):
+                continue
+            position = field.get("position")
+            if position is None:
+                continue
 
-    def _pack_hand_data(self, hands):
-        """将活跃手部数据打包到固定大小数组 (最多 2 手)。"""
-        for i in range(2):
-            if i < len(hands) and hands[i][0] is not None:
-                hp, feat = hands[i]
-                self._hx[i] = hp[0]
-                self._hy[i] = hp[1]
-                self._hvx[i] = feat["hand_velocity"][0]
-                self._hvy[i] = feat["hand_velocity"][1]
-                self._hspd[i] = feat["speed"]
-                self._hcurv[i] = feat["curvature"]
-                self._hzvel[i] = feat["z_velocity"]
-                self._hactive[i] = 1
-            else:
-                self._hactive[i] = 0
+            velocity = field.get("velocity", (0.0, 0.0))
+            self._hx[slot] = position[0]
+            self._hy[slot] = position[1]
+            self._hvx[slot] = velocity[0]
+            self._hvy[slot] = velocity[1]
+            self._hstrength[slot] = field.get("strength", 0.0)
+            self._hcoherence[slot] = field.get("coherence", 0.0)
+            self._hscatter[slot] = field.get("scatter", 0.0)
+            self._hrelease[slot] = field.get("release", 0.0)
+            self._hmaturity[slot] = field.get("maturity", 0.0)
+            self._haperture[slot] = field.get("aperture", 0.0)
+            self._hspin[slot] = field.get("spin", 1.0 if slot == 0 else -1.0)
+            self._hactive[slot] = 1
 
     @staticmethod
-    def _blend_warm(cr, cg, cb, px, py, hand_x, hand_y):
-        """手部附近的粒子混入暖金色。"""
-        dx = px - hand_x
-        dy = py - hand_y
-        d = np.sqrt(dx * dx + dy * dy)
-        if d < INFLUENCE_RADIUS * 0.7:
-            t_val = 1.0 - d / (INFLUENCE_RADIUS * 0.7)
-            # 仅轻微注入暖光，保留粒子原本的色相
-            cr = int(cr + (WARM_LIGHT[0] - cr) * t_val * 0.25)
-            cg = int(cg + (WARM_LIGHT[1] - cg) * t_val * 0.25)
-            cb = int(cb + (WARM_LIGHT[2] - cb) * t_val * 0.25)
-        return cr, cg, cb
+    def tint_color(
+        color: tuple[int, int, int],
+        px: float,
+        py: float,
+        vortices: list[dict],
+    ) -> tuple[int, int, int]:
+        """按最近涡场的阶段做轻量色温偏移，保留粒子自身色阶。"""
+        best_weight = 0.0
+        target = color
+        for field in vortices:
+            if not field.get("active") or field.get("position") is None:
+                continue
+            position = field["position"]
+            distance = float(np.hypot(px - position[0], py - position[1]))
+            reach = VORTEX_INFLUENCE_RADIUS * (1.0 + field.get("release", 0.0) * 0.35)
+            if distance >= reach:
+                continue
+            weight = (1.0 - distance / reach) * field.get("strength", 0.0)
+            if weight <= best_weight:
+                continue
+            best_weight = weight
+            if field.get("release", 0.0) > 0.3:
+                target = ECHO_COLOR
+            elif field.get("scatter", 0.0) > field.get("coherence", 0.0):
+                target = SCATTER_COLOR
+            else:
+                target = COHERENT_COLOR
+
+        blend = min(best_weight * 0.28, 0.28)
+        return tuple(
+            int(channel + (target_channel - channel) * blend)
+            for channel, target_channel in zip(color, target, strict=True)
+        )

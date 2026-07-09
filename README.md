@@ -1,191 +1,257 @@
-# 演卦 · 星尘太极
+# 演卦 · 双生涡场
 
 [![CI](https://github.com/ly99LLL/taichi/actions/workflows/ci.yml/badge.svg)](https://github.com/ly99LLL/taichi/actions/workflows/ci.yml)
 [![Python 3.11–3.12](https://img.shields.io/badge/Python-3.11%E2%80%933.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-C9A96E.svg)](LICENSE)
 
-太极手势驱动的星尘粒子实时交互系统。
+**演卦（YanGua / Twin Vortex Field）** 是一个由双手驱动的实时星尘涡旋系统。
+它不识别固定招式，而是把手速、轨迹和纵深变化转换为具有生命周期的双生流场：
+慢手维持相干涡环，快手使其破碎，检测丢失后仍保留连续衰减的余涡。
 
-**不识别具体招式，读取手势"运动气质"。** 系统将太极拳所有复杂动作降维为三个底层特征——手速、轨迹曲直、纵深位移——并实时翻译为粒子物理响应。你只需站在摄像头前，随意起势，星尘便会忠实地跟随你的手部气场而舞动。
+![无摄像头输入的演卦双生涡场合成演示](docs/assets/yan-gua-demo.png)
 
-## 效果预览
+> 上图由仓库内置的确定性合成轨迹生成，不读取摄像头、不含真人影像。画面中的粒子
+> 始终常驻；手势只改变它们的组织度、速度与可见度。
 
-| 星尘主画面 | 摄像头水墨小窗 |
+## 特性
+
+- **双手稳定身份**：固定维护左右两个槽位，MediaPipe 返回顺序变化时不会交换涡旋。
+- **连续涡场生命周期**：统一处理成核、保持、解旋、余涡和重新成核。
+- **常驻粒子模型**：6000 粒子始终存在，不在手掌位置批量生成或销毁。
+- **相反旋向与流桥**：左右涡场反向旋转，靠近时形成轻微的 `∞` 形流桥。
+- **实时与离线一致**：实时程序、视频渲染和合成演示复用运动分析、涡场控制与
+  Taichi 物理层。
+- **隐私优先**：摄像头数据默认仅在本机内存中处理；录制和文件输入均需显式启用。
+
+## 交互规则
+
+| 行为 | 粒子响应 |
 |---|---|
-| ![演卦星尘主画面](主程序直录_预览.png) | ![演卦摄像头模拟效果](主程序直录_摄像头模拟_预览.png) |
+| 缓慢移动或停留 | 背景尘埃逐渐锁定到掌心外围的空心轨道，涡旋变亮并保持相干 |
+| 快速移动 | 轨道相干性下降，切向环流转为径向剪切，粒子转冷并向外解束 |
+| 手暂时丢失 | 最后位置留下约 2.4 秒余涡，沿惯性滑行、扩张并衰减 |
+| 手重新出现 | 从低亮度尘场渐进成核，不瞬间生成一团粒子 |
+| 双手靠近 | 两个相反旋向的涡场在中间形成流桥 |
 
-## 用视频替代摄像头进行一致性检查
+## 系统要求
 
-下面的命令仍然运行主程序的 py5/OpenGL 渲染链，只把摄像头输入替换为视频文件，并把最终窗口录制下来：
+| 组件 | 要求 |
+|---|---|
+| Python | 3.11 或 3.12 |
+| Java | JDK 17 或更高版本（py5 实时窗口需要） |
+| GPU | 实时模式建议使用支持 CUDA 的 NVIDIA GPU |
+| 摄像头 | 可选；合成演示和视频文件模式不需要 |
 
-```bash
-python -m yan_gua --video "参考视频.mp4" --record "主程序直录.mp4"
-```
-
-视频输入按源文件帧率和媒体时间轴处理，因此离线运行速度不会改变手速、曲率和粒子物理。视频默认像真实摄像头模式一样水平镜像；若源视频本身已经镜像，请增加 `--no-mirror`。
-
-录制的 MP4 暂不包含音频；需要原音轨时可在录制结束后合并：
-
-```bash
-ffmpeg -i "主程序直录.mp4" -i "参考视频.mp4" -map 0:v:0 -map 1:a:0? -c:v copy -c:a aac -shortest "主程序直录_含原声.mp4"
-```
-
-美学方向：暗宇宙星尘场 + 琥珀搅动 + 旋转星云 + 劲断意不断。
+CPU 可以运行默认测试和合成演示，但实时 6000 粒子交互以 CUDA 环境为主要目标。
 
 ## 快速开始
 
-**环境要求**
+```bash
+git clone https://github.com/ly99LLL/taichi.git
+cd taichi
+python -m venv .venv
+```
 
-- Python 3.11 或 3.12
-- NVIDIA GPU (CUDA)，Taichi 加速用
-- JDK 17+，py5 运行环境
+激活虚拟环境：
 
-**安装与运行**
+```powershell
+# Windows PowerShell
+.\.venv\Scripts\Activate.ps1
+```
 
 ```bash
-python -m venv .venv
-# 激活虚拟环境后：
+# macOS / Linux
+source .venv/bin/activate
+```
+
+安装并启动：
+
+```bash
+python -m pip install --upgrade pip
 python -m pip install -e .
 python -m yan_gua
 ```
 
-Windows 可直接双击 `run.bat`。启动器优先使用已有的 `JAVA_HOME`，否则从 `PATH`
-查找 Java；不会覆盖本机配置。CUDA 不可用时仍可运行默认测试，但实时程序目前以
-NVIDIA GPU 为目标。
+Windows 用户也可以在依赖安装完成后双击 `run.bat`。启动器会优先使用已有的
+`JAVA_HOME`，否则从 `PATH` 查找 Java，不会覆盖系统配置。
 
-**操作**
+## 运行模式
 
-| 按键 | 功能 |
-|------|------|
+### 1. 实时摄像头
+
+```bash
+python -m yan_gua
+```
+
+### 2. 用视频文件替代摄像头
+
+```bash
+python -m yan_gua --video "输入视频.mp4"
+```
+
+输入视频默认按摄像头视角水平镜像。若文件本身已经镜像：
+
+```bash
+python -m yan_gua --video "输入视频.mp4" --no-mirror
+```
+
+### 3. 录制主窗口
+
+```bash
+python -m yan_gua --video "输入视频.mp4" --record "输出视频.mp4"
+```
+
+录制文件不包含音频。需要原音轨时，可在本地使用 FFmpeg 合并：
+
+```bash
+ffmpeg -i "输出视频.mp4" -i "输入视频.mp4" \
+  -map 0:v:0 -map 1:a:0? -c:v copy -c:a aac -shortest "输出_含原声.mp4"
+```
+
+### 4. 离线渲染且隐藏右下角视频
+
+```bash
+python scripts/render_video.py "输入视频.mp4" "效果视频.mp4" --no-camera
+```
+
+该模式仍使用视频做本地手部追踪，但输出画面只包含粒子场，不显示原始视频小窗。
+
+### 5. 生成无真人合成演示
+
+```bash
+python scripts/render_demo.py
+```
+
+默认输出：
+
+- `artifacts/yan-gua-demo.mp4`：10 秒合成演示视频；
+- `docs/assets/yan-gua-demo.png`：README 封面截图。
+
+脚本不会初始化摄像头，也不会读取外部媒体文件。无 CUDA 环境时可使用：
+
+```bash
+python scripts/render_demo.py --arch cpu
+```
+
+查看全部参数：
+
+```bash
+python scripts/render_demo.py --help
+python scripts/render_video.py --help
+python -m yan_gua --help
+```
+
+## 操作
+
+| 按键 / 控件 | 功能 |
+|---|---|
 | `ESC` | 退出 |
-| `F` | 全屏切换 |
-| `D` | 调试信息 |
+| `F` | 切换全屏 |
+| `D` | 显示涡场相干性、破碎度和生命周期 |
+| 右上角按钮 | 重置粒子场 |
 
-## 设计理念
+## 架构
 
-这是一个拒绝"识别"的交互系统。它不试图理解你在打哪一招，也无需匹配"云手"或"单鞭"。它只关心你的手在空气中如何移动，并据此让一片虚拟星尘做出最合理的回应。
-
-**手速决定空间的"粘性"** —— 缓缓划过时，粒子呈现极高粘稠度，拖出绵长尾迹，如同在琥珀中搅动；骤然发力时，空间瞬间稀薄，粒子如利刃劈开般迸裂。
-
-**轨迹曲直决定空间的"旋转"** —— 直线推送时粒子向两侧整齐分开；画弧时粒子受涡旋牵引，自动形成旋转星云。画大圈则旋涡宽广，画小圈则旋涡紧致。
-
-**纵深位移决定空间的"呼吸"** —— 向前按出时粒子向外膨胀扩散；向后捋回时空间向内坍缩吸纳。一呼一吸，空间随之张弛。
-
-呈现为"无菜单、无评分、无目标"的极简体验。不评价动作标不标准，只关心此时此刻的力道与轨迹，将东方哲学韵律直接可视化为物理运动。
-
-## 系统架构
-
-```
-摄像头 (1280×720)
-    │
-    ▼
-CLAHE 增强 ──→ MediaPipe Hands (21点手指, 优先)
-    │           MediaPipe Pose  (33点骨架, 降级补位)
-    │
-    ▼
-MotionAnalyzer ──→ 速度 / 曲率 / 纵深速度 (EMA 平滑)
-    │
-    ▼
-Taichi CUDA Kernel ──→ 6000 粒子 GPU 并行物理计算
-    │
-    ▼
-py5 OpenGL ──→ 粒子渲染 + 拖尾效果
-    │
-    ▼
-CameraRenderer ──→ 右下角水墨小窗 (骨架笔触 + 手部关键点)
+```text
+摄像头 / 视频 / 合成轨迹
+          │
+          ├─ 摄像头或视频 → CLAHE → MediaPipe Hands / Pose
+          │
+          ▼
+   MotionAnalyzer
+   固定身份槽 + 速度 / 曲率 / 纵深
+          │
+          ▼
+   VortexController
+   forming / holding / dispersing / echo
+          │
+          ▼
+   Taichi Kernel（6000 粒子）
+   常驻尘场 / 双涡环 / 解束 / ∞ 流桥
+          │
+          ├─ py5：实时渲染
+          └─ OpenCV：离线视频与合成演示
 ```
 
-### 检测策略
-
-1. **MediaPipe Hands** — 优先。手部在画面中足够大时，使用完整 21 点手指关键点
-2. **MediaPipe Pose** — 降级。手太小或太远时，用腕关节 (landmark 15/16) 作为手掌位置
-3. CLAHE 对比度增强预处理，用于改善低对比度画面；实际收益取决于摄像头、光照与距离
-
-## 粒子物理
-
-### 三层空间结构
-
-```
-手掌中心
-  ← 0-25% 半径：中空区  粒子被猛推向外，掌心虚空，不回吸
-  ← 25-40% 半径：环壁   轻吸维持边界，粒子堆积成可见漩涡环
-  ← 40-100% 半径：外层  粘性拖拽 + 旋涡 + 飞溅 + 呼吸
-  ← 超出范围：不受影响  缓慢回归基态
-```
-
-### 六大物理力
-
-| 力 | 方向 | 效果 |
-|----|------|------|
-| **中空推力** | 径向向外 | 掌心区域粒子被推出，形成虚空 |
-| **环壁拉力** | 径向向内 | 25-40% 半径处轻吸，粒子堆积为可见环 |
-| **粘性拖拽** | 跟随手速 | 手慢时粒子粘稠跟随，如琥珀搅动 |
-| **飞溅** | 径向向外 | 手快时粒子向外迸裂 |
-| **基线漩涡** | 切向 | 手在就有旋转 |
-| **曲率漩涡** | 切向 | 画弧时漩涡大幅增强 |
-| **呼吸** | 径向 | 前推膨胀 / 后拉收缩 |
-
-核心公式：`粘稠度 = 1.0 - 手速/最大速度`
-
-### 调色板
-
-深空暗墨背景 RGB(16,12,8)，粒子六阶墨韵色从暖金星芒渐变至虚空暗质，手部活跃时混入琥珀暖色。
+`MotionAnalyzer.process()` 始终返回两个身份槽；`observed` 表示当前帧确有观测，
+`hand_detected` 只服务于短暂的 UI 迟滞。缺手状态必须经由 `VortexController`
+进入 `echo`，不会直接关闭物理场。
 
 ## 项目结构
 
-```
-yan_gua/              主程序包：跟踪、运动分析、物理与渲染
-scripts/              离线视频渲染工具
-tests/                CPU 单元/集成测试与可选 CUDA 测试
-.github/workflows/    持续集成
-pyproject.toml        包元数据与工具配置
+```text
+yan_gua/               核心包：追踪、运动分析、生命周期、物理与渲染
+scripts/               视频离线渲染与无真人合成演示
+tests/                 CPU 单元/集成测试与可选 CUDA 测试
+docs/assets/           可公开、无人物的 README 媒体
+.github/               CI、Dependabot 与协作模板
+pyproject.toml         包元数据及 Ruff、pytest、coverage 配置
 ```
 
-## 运行测试
+## 关键参数
+
+参数集中在 `yan_gua/config.py`：
+
+| 参数 | 默认值 | 作用 |
+|---|---:|---|
+| `PARTICLE_COUNT` | 6000 | 常驻尘埃数量 |
+| `VORTEX_ORBIT_RADIUS` | 92 | 稳定轨道半径 |
+| `VORTEX_INFLUENCE_RADIUS` | 320 | 涡场影响外缘 |
+| `VORTEX_SLOW_SPEED` | 105 | 开始失去相干的速度 |
+| `VORTEX_BREAK_SPEED` | 520 | 完全解旋的速度 |
+| `VORTEX_FORM_SECONDS` | 0.55 | 新涡旋成核时间 |
+| `VORTEX_ECHO_SECONDS` | 2.4 | 余涡衰减时间尺度 |
+| `TRAIL_ALPHA` | 24 | 帧缓冲拖尾衰减 |
+
+两个槽位旋向固定相反：slot 0 为 `+1`，slot 1 为 `-1`。
+
+## 开发与测试
+
+安装开发依赖：
 
 ```bash
 python -m pip install -e ".[dev]"
-ruff check .
-ruff format --check .
-pytest -m "not cuda" --cov=yan_gua
+pre-commit install
 ```
 
-默认测试使用 Taichi CPU 后端，可在普通开发机和 GitHub Actions 上运行。CUDA 集成测试
-需要 NVIDIA 环境并显式启用：
+运行本地质量检查：
 
 ```bash
-# Windows PowerShell
-$env:YANGUA_RUN_CUDA_TESTS = "1"
-pytest -m cuda
+ruff check .
+ruff format --check .
+python -m pytest tests/ -m "not cuda" -v
 ```
 
-## 配置参数
+启用 CUDA 集成测试：
 
-所有可调参数集中在 `yan_gua/config.py`，关键项：
+```powershell
+$env:YANGUA_RUN_CUDA_TESTS = "1"
+python -m pytest tests/test_physics_cuda.py -m cuda -v
+```
 
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `PARTICLE_COUNT` | 6000 | 粒子总数 |
-| `INFLUENCE_RADIUS` | 240 | 手掌影响半径 |
-| `MAX_SPEED` | 800 | 归一化参考速度 |
-| `SMOOTH_ALPHA` | 0.35 | EMA 平滑系数 |
-| `TRAIL_ALPHA` | 7 | 拖尾长度 (越小越长) |
-| `BASE_DAMPING` | 0.985 | 速度阻尼 |
-| `HISTORY_SIZE` | 45 | 运动历史帧数 |
+CI 在 Python 3.11 和 3.12 上执行静态检查、格式检查、非 CUDA 测试与覆盖率统计。
 
-## 依赖
+## 隐私与媒体规范
 
-| 包 | 用途 |
-|----|------|
-| py5 | Processing Python 渲染 |
-| opencv-python | 摄像头 + 图像处理 |
-| mediapipe | 手部/骨架检测 |
-| numpy | 数组计算 |
-| taichi | GPU 加速粒子物理 |
-| JDK 17 | py5 运行时 |
+- 摄像头帧默认只在本机进程内处理，项目不包含上传或遥测逻辑。
+- 只有显式传入 `--record` 时，实时程序才会写入录制文件。
+- 原始视频、录制视频、逐帧调试图和 `artifacts/` 均由 `.gitignore` 排除。
+- `docs/assets/` 只接受无人物、无个人信息且已确认可公开的项目演示素材。
+- 提交前应检查文件元数据、绝对路径、账号邮箱、访问令牌、密钥和第三方肖像。
 
-## 许可
+## 已知限制
 
-[MIT](LICENSE) © 2026 ly99LLL。参与开发前请阅读
-[贡献指南](CONTRIBUTING.md)、[行为准则](CODE_OF_CONDUCT.md)和
-[安全政策](SECURITY.md)；版本变化记录在[更新日志](CHANGELOG.md)。
+- 实时渲染目前主要面向 Windows/Linux + NVIDIA CUDA；其他 GPU 后端未作为发布目标验证。
+- MediaPipe 的识别质量会受到遮挡、逆光、手部尺寸和摄像头帧率影响。
+- MP4 录制不保留输入音频，需要在本地后期合并。
+- 项目处于 Beta 阶段，物理参数和视觉表现仍可能在次版本中调整。
+
+## 参与项目
+
+提交改动前请阅读[贡献指南](CONTRIBUTING.md)和[行为准则](CODE_OF_CONDUCT.md)。
+安全问题请按[安全政策](SECURITY.md)私下报告；版本变化记录见
+[更新日志](CHANGELOG.md)。
+
+## 许可证
+
+本项目采用 [MIT License](LICENSE)。

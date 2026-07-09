@@ -1,5 +1,5 @@
-# 演卦 · 星尘太极 (Stardust Taichi)
-# 太极手势驱动的星尘粒子实时交互系统
+# 演卦 · 双生涡场 (Twin Vortex Field)
+# 双手驱动的实时星尘涡场交互系统
 #
 # 安装: pip install -r requirements.txt
 # 运行: python -m yan_gua  或 双击 run.bat (Windows)

@@ -128,12 +128,20 @@ class HandTracker:
         # 解析手部数据
         hands = []
         if hand_results.multi_hand_landmarks:
-            for lm in hand_results.multi_hand_landmarks:
+            handedness = getattr(hand_results, "multi_handedness", None) or []
+            for index, lm in enumerate(hand_results.multi_hand_landmarks):
                 wrist = lm.landmark[0]
                 mid_mcp = lm.landmark[9]
                 all_lms = [{"x": p.x, "y": p.y, "z": p.z} for p in lm.landmark]
+                classification = (
+                    handedness[index].classification[0]
+                    if index < len(handedness) and handedness[index].classification
+                    else None
+                )
                 hands.append(
                     {
+                        "id_hint": classification.label if classification else None,
+                        "id_confidence": (float(classification.score) if classification else 0.0),
                         "palm_center": {
                             "x": (wrist.x + mid_mcp.x) / 2,
                             "y": (wrist.y + mid_mcp.y) / 2,
@@ -150,6 +158,8 @@ class HandTracker:
                 if lm.visibility > POSE_WRIST_VISIBILITY:
                     hands.append(
                         {
+                            "id_hint": "Left" if wrist_id == 15 else "Right",
+                            "id_confidence": float(lm.visibility),
                             "palm_center": {"x": lm.x, "y": lm.y, "z": lm.z},
                             "landmarks": [],
                         }

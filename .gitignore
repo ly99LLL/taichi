@@ -1,14 +1,20 @@
-# 视频文件 (体积大, 不含代码)
+# 视频文件（体积大，可能含人物或音轨）
 *.mp4
 *.avi
 *.mov
+*.mkv
+*.webm
 
 # Python
 __pycache__/
 *.py[cod]
 *.egg-info/
+.venv/
+venv/
 dist/
+build/
 .pytest_cache/
+.ruff_cache/
 .coverage
 coverage.xml
 htmlcov/
@@ -24,9 +30,14 @@ Thumbs.db
 # JVM crash logs
 hs_err_pid*.log
 
-# 输出文件
-效果视频.mp4
-成果演示.mp4
+# 本地输出与可能包含敏感内容的环境文件
+artifacts/
+.env
+.env.*
+!.env.example
 
 # 本地逐帧调试输出
 frame_*.png
+
+# 仓库根目录的临时预览；可公开素材只放入 docs/assets/
+/*.png

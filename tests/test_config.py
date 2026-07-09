@@ -1,34 +1,29 @@
-"""测试 config 模块 — 验证常量值正确。"""
+"""配置边界测试。"""
 
 import yan_gua.config as cfg
 
 
-def test_colors():
-    """色彩常量应为有效 RGB 元组。"""
-    assert cfg.BG_R == 16
-    assert cfg.BG_G == 12
-    assert cfg.BG_B == 8
+def test_cinematic_palette():
+    assert (cfg.BG_R, cfg.BG_G, cfg.BG_B) == (3, 3, 4)
     assert len(cfg.INK_COLORS) == 8
     assert cfg.NUM_INK_LEVELS == 8
-    assert cfg.WARM_ACCENT == (200, 155, 90)
-    assert cfg.WARM_LIGHT == (240, 210, 150)
+    for color in cfg.INK_COLORS:
+        assert len(color) == 3
+        assert all(0 <= channel <= 255 for channel in color)
 
 
-def test_particle_constants():
-    """粒子系统常量应在合理范围内。"""
+def test_vortex_constants():
     assert cfg.PARTICLE_COUNT == 6000
-    assert cfg.INFLUENCE_RADIUS == 240
-    assert cfg.MAX_SPEED == 800
-    assert cfg.CURVATURE_REF == 400
-    assert 0 < cfg.SMOOTH_ALPHA < 1
-    assert cfg.BASE_DAMPING < 1.0
-    assert cfg.CENTER_GRAVITY > 0.00003
-    assert cfg.HAND_FORCE_MULTIPLIER > 1.0
+    assert cfg.VORTEX_ORBIT_RADIUS < cfg.VORTEX_INFLUENCE_RADIUS
+    assert cfg.VORTEX_SLOW_SPEED < cfg.VORTEX_BREAK_SPEED
+    assert cfg.VORTEX_FORM_SECONDS > 0
+    assert cfg.VORTEX_ECHO_SECONDS > cfg.VORTEX_FORM_SECONDS
+    assert cfg.INFLUENCE_RADIUS == cfg.VORTEX_INFLUENCE_RADIUS
+    assert 0 < cfg.BASE_DAMPING < 1
     assert cfg.TRAIL_ALPHA > 0
 
 
 def test_window_defaults():
-    """窗口默认值应为正数。"""
     assert cfg.WINDOW_W == 1280
     assert cfg.WINDOW_H == 720
     assert cfg.CAM_W == 280
@@ -37,7 +32,6 @@ def test_window_defaults():
 
 
 def test_camera_constants():
-    """摄像头参数应在合理范围。"""
     assert cfg.CAMERA_WIDTH == 1280
     assert cfg.CAMERA_HEIGHT == 720
     assert cfg.CAMERA_FPS == 30
