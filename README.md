@@ -1,8 +1,34 @@
 # 演卦 · 星尘太极
 
+[![CI](https://github.com/ly99LLL/taichi/actions/workflows/ci.yml/badge.svg)](https://github.com/ly99LLL/taichi/actions/workflows/ci.yml)
+[![Python 3.11–3.12](https://img.shields.io/badge/Python-3.11%E2%80%933.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 太极手势驱动的星尘粒子实时交互系统。
 
 **不识别具体招式，读取手势"运动气质"。** 系统将太极拳所有复杂动作降维为三个底层特征——手速、轨迹曲直、纵深位移——并实时翻译为粒子物理响应。你只需站在摄像头前，随意起势，星尘便会忠实地跟随你的手部气场而舞动。
+
+## 效果预览
+
+| 星尘主画面 | 摄像头水墨小窗 |
+|---|---|
+| ![演卦星尘主画面](主程序直录_预览.png) | ![演卦摄像头模拟效果](主程序直录_摄像头模拟_预览.png) |
+
+## 用视频替代摄像头进行一致性检查
+
+下面的命令仍然运行主程序的 py5/OpenGL 渲染链，只把摄像头输入替换为视频文件，并把最终窗口录制下来：
+
+```bash
+python -m yan_gua --video "参考视频.mp4" --record "主程序直录.mp4"
+```
+
+视频输入按源文件帧率和媒体时间轴处理，因此离线运行速度不会改变手速、曲率和粒子物理。视频默认像真实摄像头模式一样水平镜像；若源视频本身已经镜像，请增加 `--no-mirror`。
+
+录制的 MP4 暂不包含音频；需要原音轨时可在录制结束后合并：
+
+```bash
+ffmpeg -i "主程序直录.mp4" -i "参考视频.mp4" -map 0:v:0 -map 1:a:0? -c:v copy -c:a aac -shortest "主程序直录_含原声.mp4"
+```
 
 美学方向：暗宇宙星尘场 + 琥珀搅动 + 旋转星云 + 劲断意不断。
 
@@ -10,18 +36,22 @@
 
 **环境要求**
 
-- Python 3.11+
+- Python 3.11 或 3.12
 - NVIDIA GPU (CUDA)，Taichi 加速用
-- JDK 17，py5 运行环境
+- JDK 17+，py5 运行环境
 
 **安装与运行**
 
 ```bash
-pip install -r requirements.txt
+python -m venv .venv
+# 激活虚拟环境后：
+python -m pip install -e .
 python -m yan_gua
 ```
 
-Windows 可直接双击 `run.bat`。
+Windows 可直接双击 `run.bat`。启动器优先使用已有的 `JAVA_HOME`，否则从 `PATH`
+查找 Java；不会覆盖本机配置。CUDA 不可用时仍可运行默认测试，但实时程序目前以
+NVIDIA GPU 为目标。
 
 **操作**
 
@@ -69,7 +99,7 @@ CameraRenderer ──→ 右下角水墨小窗 (骨架笔触 + 手部关键点)
 
 1. **MediaPipe Hands** — 优先。手部在画面中足够大时，使用完整 21 点手指关键点
 2. **MediaPipe Pose** — 降级。手太小或太远时，用腕关节 (landmark 15/16) 作为手掌位置
-3. CLAHE 对比度增强预处理，远距离手部检出率提升约 20-27%
+3. CLAHE 对比度增强预处理，用于改善低对比度画面；实际收益取决于摄像头、光照与距离
 
 ## 粒子物理
 
@@ -104,16 +134,29 @@ CameraRenderer ──→ 右下角水墨小窗 (骨架笔触 + 手部关键点)
 ## 项目结构
 
 ```
-yan_gua/   ← 每个文件说明见 yan_gua/README.md
-scripts/   ← 每个文件说明见 scripts/README.md
-tests/     ← 每个文件说明见 tests/README.md
-archive/   ← 每个文件说明见 archive/README.md
+yan_gua/              主程序包：跟踪、运动分析、物理与渲染
+scripts/              离线视频渲染工具
+tests/                CPU 单元/集成测试与可选 CUDA 测试
+.github/workflows/    持续集成
+pyproject.toml        包元数据与工具配置
 ```
 
 ## 运行测试
 
 ```bash
-python -m pytest tests/ -v
+python -m pip install -e ".[dev]"
+ruff check .
+ruff format --check .
+pytest -m "not cuda" --cov=yan_gua
+```
+
+默认测试使用 Taichi CPU 后端，可在普通开发机和 GitHub Actions 上运行。CUDA 集成测试
+需要 NVIDIA 环境并显式启用：
+
+```bash
+# Windows PowerShell
+$env:YANGUA_RUN_CUDA_TESTS = "1"
+pytest -m cuda
 ```
 
 ## 配置参数
@@ -143,4 +186,6 @@ python -m pytest tests/ -v
 
 ## 许可
 
-MIT
+[MIT](LICENSE) © 2026 ly99LLL。参与开发前请阅读
+[贡献指南](CONTRIBUTING.md)、[行为准则](CODE_OF_CONDUCT.md)和
+[安全政策](SECURITY.md)；版本变化记录在[更新日志](CHANGELOG.md)。

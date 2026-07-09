@@ -9,6 +9,9 @@ __pycache__/
 *.egg-info/
 dist/
 .pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
 
 # IDE
 .vscode/
@@ -24,3 +27,6 @@ hs_err_pid*.log
 # 输出文件
 效果视频.mp4
 成果演示.mp4
+
+# 本地逐帧调试输出
+frame_*.png

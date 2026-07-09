@@ -21,12 +21,12 @@ PARTICLE_SIZE_MAX = 32
 
 # 墨韵色阶: 深空星尘 — 克制琥珀调
 INK_COLORS = [
-    (180, 160, 130),   # 遥远星芒
-    (140, 120, 95),    # 淡星尘
-    (105, 85, 65),     # 中层云气
-    (75, 58, 42),      # 暗流
-    (48, 35, 24),      # 深空暗质
-    (28, 18, 12),      # 虚空 (接近背景)
+    (180, 160, 130),  # 遥远星芒
+    (140, 120, 95),  # 淡星尘
+    (105, 85, 65),  # 中层云气
+    (75, 58, 42),  # 暗流
+    (48, 35, 24),  # 深空暗质
+    (28, 18, 12),  # 虚空 (接近背景)
 ]
 NUM_INK_LEVELS = len(INK_COLORS)
 
@@ -42,15 +42,15 @@ CAM_MARGIN = 20
 # 水墨滤镜参数 (轻量版 — 人保持清晰可见)
 CAM_BILATERAL_D = 5
 CAM_BILATERAL_SIGMA = 40
-CAM_WARM_BLEND = 0.35        # 暖色调混合比例 (越低越保留原色)
-CAM_EDGE_STRENGTH = 0.2      # 墨线强度
-CAM_VIGNETTE = 0.12          # 暗角强度
+CAM_WARM_BLEND = 0.35  # 暖色调混合比例 (越低越保留原色)
+CAM_EDGE_STRENGTH = 0.2  # 墨线强度
+CAM_VIGNETTE = 0.12  # 暗角强度
 
 # 手部笔触参数
-CAM_BRUSH_BLUR = 3           # 笔触扩散模糊
-CAM_BRUSH_OPACITY = 0.35     # 笔触透明度
-CAM_FINGERTIP_R = 4          # 指尖光点半径
-CAM_JOINT_R = 2              # 关节光点半径
+CAM_BRUSH_BLUR = 3  # 笔触扩散模糊
+CAM_BRUSH_OPACITY = 0.35  # 笔触透明度
+CAM_FINGERTIP_R = 4  # 指尖光点半径
+CAM_JOINT_R = 2  # 关节光点半径
 
 # ============================================================
 # 系统常量
@@ -67,12 +67,12 @@ CAMERA_FPS = 30
 
 # 粒子系统
 PARTICLE_COUNT = 6000
-INFLUENCE_RADIUS = 240        # 手掌影响范围 (1.5x 扩大)
-MAX_SPEED = 800               # 归一化参考速度
-CURVATURE_REF = 400           # 曲率参考速度 (更灵敏)
-SMOOTH_ALPHA = 0.35           # EMA 平滑系数 (混沌流动感)
-HISTORY_SIZE = 45             # 运动历史长度
-BASE_DAMPING = 0.985          # 速度阻尼 (惯性尾迹)
+INFLUENCE_RADIUS = 240  # 手掌影响范围 (1.5x 扩大)
+MAX_SPEED = 800  # 归一化参考速度
+CURVATURE_REF = 400  # 曲率参考速度 (更灵敏)
+SMOOTH_ALPHA = 0.35  # EMA 平滑系数 (混沌流动感)
+HISTORY_SIZE = 45  # 运动历史长度
+BASE_DAMPING = 0.985  # 速度阻尼 (惯性尾迹)
 
 # MediaPipe 模型参数
 HANDS_MODEL_COMPLEXITY = 1
@@ -91,6 +91,3 @@ POSE_WRIST_VISIBILITY = 0.4
 
 # py5 帧率目标
 TARGET_FRAME_RATE = 60
-
-# JDK 路径 (py5 依赖)
-JAVA_HOME_PATH = "C:/Program Files/Microsoft/jdk-17.0.19.10-hotspot"

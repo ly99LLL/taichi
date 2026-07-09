@@ -1,10 +1,13 @@
 """测试粒子物理模块 — 验证 CloudParticles + Taichi kernel。"""
 
 import numpy as np
+import pytest
 import taichi as ti
 
 # Taichi 必须在导入 physics 前初始化
-ti.init(arch=ti.cuda, random_seed=42)
+ti.init(arch=ti.cpu, random_seed=42)
+
+pytestmark = pytest.mark.physics
 
 
 def test_cloud_particles_init():
@@ -47,11 +50,11 @@ def test_cloud_particles_update_with_hand():
     # 单手, 居中, 快速移动
     hand_pos = np.array([640.0, 360.0], dtype=np.float32)
     feat = {
-        'speed': 200.0,
-        'curvature': 0.1,
-        'z_velocity': 10.0,
-        'hand_velocity': np.array([50.0, 20.0], dtype=np.float32),
-        'hand_detected': True,
+        "speed": 200.0,
+        "curvature": 0.1,
+        "z_velocity": 10.0,
+        "hand_velocity": np.array([50.0, 20.0], dtype=np.float32),
+        "hand_detected": True,
     }
     hands = [(hand_pos, feat)]
 
@@ -69,11 +72,11 @@ def test_cloud_particles_two_hands():
     cp = CloudParticles(count=500, win_w=1280, win_h=720)
 
     feat = {
-        'speed': 100.0,
-        'curvature': 0.05,
-        'z_velocity': 5.0,
-        'hand_velocity': np.array([10.0, 5.0], dtype=np.float32),
-        'hand_detected': True,
+        "speed": 100.0,
+        "curvature": 0.05,
+        "z_velocity": 5.0,
+        "hand_velocity": np.array([10.0, 5.0], dtype=np.float32),
+        "hand_detected": True,
     }
     hands = [
         (np.array([400.0, 360.0], dtype=np.float32), feat),
@@ -109,8 +112,13 @@ def test_physics_kernel_warmup():
         hcurv_arr=np.zeros(2, dtype=np.float32),
         hzvel_arr=np.zeros(2, dtype=np.float32),
         hactive_arr=np.array([1, 0], dtype=np.int32),
-        dt=0.016, win_w=1280.0, win_h=720.0,
-        infl_r=240.0, max_spd=800.0, curv_ref=400.0, base_damp=0.985,
+        dt=0.016,
+        win_w=1280.0,
+        win_h=720.0,
+        infl_r=240.0,
+        max_spd=800.0,
+        curv_ref=400.0,
+        base_damp=0.985,
     )
     # 如果成功返回 (无异常), kernel 已编译
     assert True

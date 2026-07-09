@@ -43,9 +43,3 @@ def test_camera_constants():
     assert cfg.POSE_MODEL_COMPLEXITY in (0, 1, 2)
     assert 0 < cfg.HANDS_DETECTION_CONFIDENCE <= 1
     assert 0 < cfg.POSE_WRIST_VISIBILITY <= 1
-
-
-def test_java_home():
-    """JDK 路径应为字符串且非空。"""
-    assert isinstance(cfg.JAVA_HOME_PATH, str)
-    assert len(cfg.JAVA_HOME_PATH) > 0

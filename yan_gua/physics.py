@@ -77,12 +77,26 @@ def _particle_physics_kernel(
         for h in ti.static(range(2)):
             if hactive_arr[h] == 1:
                 _apply_hand_force(
-                    i, h,
-                    px, py, vx, vy, alpha, radius, ink_level,
-                    base_alpha, base_radius,
-                    hx_arr, hy_arr, hvx_arr, hvy_arr,
-                    hspd_arr, hcurv_arr, hzvel_arr,
-                    infl_r, max_spd,
+                    i,
+                    h,
+                    px,
+                    py,
+                    vx,
+                    vy,
+                    alpha,
+                    radius,
+                    ink_level,
+                    base_alpha,
+                    base_radius,
+                    hx_arr,
+                    hy_arr,
+                    hvx_arr,
+                    hvy_arr,
+                    hspd_arr,
+                    hcurv_arr,
+                    hzvel_arr,
+                    infl_r,
+                    max_spd,
                 )
                 # 检查该粒子是否在手的影响范围内
                 dx = px[i] - hx_arr[h]
@@ -157,7 +171,7 @@ def _apply_hand_force(
 
         # 运动特征
         nspd = ti.math.clamp(hspd_arr[h] / max_spd, 0.0, 1.0)
-        visc = 1.0 - nspd                     # 慢 = 粘稠, 快 = 稀薄
+        visc = 1.0 - nspd  # 慢 = 粘稠, 快 = 稀薄
         hvx = hvx_arr[h]
         hvy = hvy_arr[h]
 
@@ -198,7 +212,8 @@ def _apply_hand_force(
         # ---- 视觉响应 ----
         activity = ti.math.clamp(
             nspd * 0.4 + hcurv_arr[h] * 2.0 + ti.abs(hzvel_arr[h]) * 0.003,
-            0.0, 1.0,
+            0.0,
+            1.0,
         )
 
         # 透明度
@@ -249,7 +264,11 @@ class CloudParticles:
         # 视觉属性
         self.alpha = rng.uniform(2, 12, count).astype(np.float32)
         self.radius = rng.uniform(3, 15, count).astype(np.float32)
-        self.ink_level = rng.integers(0, NUM_INK_LEVELS, count).astype(np.int32)
+        self.ink_level = rng.choice(
+            NUM_INK_LEVELS,
+            count,
+            p=[0.04, 0.08, 0.13, 0.22, 0.28, 0.25],
+        ).astype(np.int32)
 
         # 基准状态 (不受手影响时的回归目标)
         self.base_alpha = self.alpha.copy()
@@ -277,15 +296,31 @@ class CloudParticles:
         self._pack_hand_data(hands)
 
         _particle_physics_kernel(
-            self.px, self.py, self.vx, self.vy,
-            self.alpha, self.radius, self.ink_level,
-            self.base_alpha, self.base_radius, self.base_ink,
-            self._hx, self._hy, self._hvx, self._hvy,
-            self._hspd, self._hcurv, self._hzvel, self._hactive,
+            self.px,
+            self.py,
+            self.vx,
+            self.vy,
+            self.alpha,
+            self.radius,
+            self.ink_level,
+            self.base_alpha,
+            self.base_radius,
+            self.base_ink,
+            self._hx,
+            self._hy,
+            self._hvx,
+            self._hvy,
+            self._hspd,
+            self._hcurv,
+            self._hzvel,
+            self._hactive,
             dt,
-            float(self.win_w), float(self.win_h),
-            float(INFLUENCE_RADIUS), float(MAX_SPEED),
-            float(CURVATURE_REF), float(BASE_DAMPING),
+            float(self.win_w),
+            float(self.win_h),
+            float(INFLUENCE_RADIUS),
+            float(MAX_SPEED),
+            float(CURVATURE_REF),
+            float(BASE_DAMPING),
         )
 
     def draw(self, has_hand, hand_x, hand_y):
@@ -294,6 +329,7 @@ class CloudParticles:
         py5 GPU 渲染, 按 alpha 排序实现深度感 (暗粒子在下, 亮粒子在上)。
         """
         import py5  # 延迟导入: 仅在渲染时需要 py5/JVM
+
         py5.no_stroke()
         py5.blend_mode(py5.BLEND)
 
@@ -313,7 +349,13 @@ class CloudParticles:
             # 手部附近混入暖金色
             if has_hand and hand_x is not None:
                 cr, cg, cb = self._blend_warm(
-                    cr, cg, cb, self.px[idx], self.py[idx], hand_x, hand_y,
+                    cr,
+                    cg,
+                    cb,
+                    self.px[idx],
+                    self.py[idx],
+                    hand_x,
+                    hand_y,
                 )
 
             py5.fill(cr, cg, cb, min(a, 255))
@@ -328,11 +370,11 @@ class CloudParticles:
                 hp, feat = hands[i]
                 self._hx[i] = hp[0]
                 self._hy[i] = hp[1]
-                self._hvx[i] = feat['hand_velocity'][0]
-                self._hvy[i] = feat['hand_velocity'][1]
-                self._hspd[i] = feat['speed']
-                self._hcurv[i] = feat['curvature']
-                self._hzvel[i] = feat['z_velocity']
+                self._hvx[i] = feat["hand_velocity"][0]
+                self._hvy[i] = feat["hand_velocity"][1]
+                self._hspd[i] = feat["speed"]
+                self._hcurv[i] = feat["curvature"]
+                self._hzvel[i] = feat["z_velocity"]
                 self._hactive[i] = 1
             else:
                 self._hactive[i] = 0
