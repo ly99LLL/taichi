@@ -104,25 +104,10 @@ CameraRenderer ──→ 右下角水墨小窗 (骨架笔触 + 手部关键点)
 ## 项目结构
 
 ```
-yan_gua/                 # 主包
-├── __main__.py          # 入口 (GPU 预热 → py5 启动)
-├── config.py            # 全部可调参数集中管理
-├── physics.py           # Taichi CUDA kernel + 粒子系统
-├── tracking.py          # 摄像头采集 + CLAHE + MediaPipe
-├── motion.py            # 运动特征提取 (速度/曲率/纵深)
-├── camera_renderer.py   # 水墨滤镜 + 骨架笔触
-└── sketch.py            # py5 渲染循环
-
-scripts/
-└── render_video.py      # 视频离线渲染工具
-
-tests/
-├── test_config.py       # 常量验证
-├── test_motion.py       # 运动分析测试
-└── test_physics.py      # 粒子物理测试
-
-archive/
-└── main_legacy.py       # 旧版 (Pygame + OpenGL, 已废弃)
+yan_gua/   ← 每个文件说明见 yan_gua/README.md
+scripts/   ← 每个文件说明见 scripts/README.md
+tests/     ← 每个文件说明见 tests/README.md
+archive/   ← 每个文件说明见 archive/README.md
 ```
 
 ## 运行测试
