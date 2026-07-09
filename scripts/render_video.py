@@ -1,26 +1,44 @@
 #!/usr/bin/env python3
 """
-演卦 · 视频渲染器 v2
+演卦 · 视频渲染器 v3
 =====================
 程序界面风格：全屏星尘粒子 + 右下角参考视频小窗。
 纯 OpenCV + NumPy，不依赖 py5。
+从 yan_gua 包导入共享模块 (config, motion)。
 
-用法: python render_video.py
+用法: python scripts/render_video.py
 输入: 参考视频.mp4
 输出: 效果视频.mp4
 """
 
+import sys
 import time
-import numpy as np
 from collections import deque
+from pathlib import Path
 
 import cv2
 import mediapipe as mp
+import numpy as np
+
+# 确保项目根目录在 sys.path 中 (script 在子目录时也能导入 yan_gua)
+_project_root = Path(__file__).resolve().parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
+from yan_gua.config import (
+    BG_B, BG_G, BG_R,
+    CURVATURE_REF,
+    INFLUENCE_RADIUS,
+    MAX_SPEED,
+    SMOOTH_ALPHA,
+    WARM_ACCENT,
+    WARM_LIGHT,
+)
+from yan_gua.motion import MotionAnalyzer
 
 # ============================================================
-# 色彩常量 (与 yan_gua.py 一致)
+# 视频渲染专用常量 (与 yan_gua/config 不同)
 # ============================================================
-BG_R, BG_G, BG_B = 16, 12, 8
 BG_BGR = (BG_B, BG_G, BG_R)
 
 INK_COLORS = [
@@ -33,24 +51,16 @@ INK_COLORS = [
 ]
 INK_COLORS_BGR = [(b, g, r) for r, g, b in INK_COLORS]
 
-WARM_ACCENT_BGR = (90, 155, 200)
-WARM_LIGHT_BGR = (150, 210, 240)
+WARM_ACCENT_BGR = (WARM_ACCENT[2], WARM_ACCENT[1], WARM_ACCENT[0])
+WARM_LIGHT_BGR = (WARM_LIGHT[2], WARM_LIGHT[1], WARM_LIGHT[0])
 
-# ============================================================
-# 画布 & 小窗常量
-# ============================================================
+# 画布 & 小窗
 CANVAS_W, CANVAS_H = 1280, 720
 CAM_W, CAM_H = 280, 210
 CAM_MARGIN = 20
 
-# ============================================================
-# 粒子物理参数 (与 yan_gua.py 一致)
-# ============================================================
+# 粒子物理参数 (视频专用)
 PARTICLE_COUNT = 4000
-INFLUENCE_RADIUS = 240  # 1.5x (与 yan_gua.py 同步)
-MAX_SPEED = 800
-CURVATURE_REF = 400
-SMOOTH_ALPHA = 0.35
 HISTORY_SIZE = 45
 BASE_DAMPING = 0.985
 TRAIL_ALPHA = 15                        # 视频拖尾 (琥珀流动感)
@@ -58,84 +68,7 @@ PARTICLE_ALPHA_MAX = 22
 PARTICLE_SIZE_MAX = 32
 
 
-# ============================================================
-# MotionAnalyzer (与 yan_gua.py 相同)
-# ============================================================
-class MotionAnalyzer:
-    MAX_HANDS = 2
-
-    def __init__(self, win_w, win_h):
-        self.win_w = win_w
-        self.win_h = win_h
-        self.states = [self._new_state() for _ in range(self.MAX_HANDS)]
-
-    @staticmethod
-    def _new_state():
-        return {
-            'history': deque(maxlen=HISTORY_SIZE),
-            'speed': 0.0, 'curvature': 0.0, 'z_velocity': 0.0,
-            'hand_velocity': np.zeros(2, dtype=np.float32),
-            'hand_world_pos': None,
-            'last_direction': np.zeros(2, dtype=np.float32),
-            'hand_detected': False, 'presence_counter': 0,
-        }
-
-    def process(self, hands_data, timestamp):
-        results = []
-        for i in range(self.MAX_HANDS):
-            st = self.states[i]
-            has = hands_data is not None and i < len(hands_data)
-            if has:
-                palm = hands_data[i]['palm_center']
-                pos = np.array([palm['x'] * self.win_w,
-                                palm['y'] * self.win_h], dtype=np.float32)
-                st['presence_counter'] = min(st['presence_counter'] + 1, 8)
-            else:
-                pos = np.zeros(2, dtype=np.float32)
-                st['presence_counter'] = max(st['presence_counter'] - 1, 0)
-            st['hand_detected'] = st['presence_counter'] >= 1
-            st['history'].append((pos, timestamp, has))
-            if st['hand_detected'] and has:
-                self._compute(pos, st)
-                st['hand_world_pos'] = pos.copy()
-            else:
-                st['speed'] *= 0.9
-                st['curvature'] *= 0.85
-                st['z_velocity'] *= 0.85
-                st['hand_velocity'] *= 0.9
-            results.append(st)
-        return results
-
-    def _compute(self, cur, st):
-        recent = [(p, t) for p, t, h in reversed(st['history']) if h]
-        if len(recent) < 2:
-            return
-        tv = np.zeros(2, dtype=np.float32); tw = 0.0
-        for i in range(len(recent) - 1):
-            cp, ct = recent[i]; pp, pt = recent[i + 1]
-            dt = ct - pt
-            if dt > 0.001:
-                w = 1.0 / (1.0 + i * 0.3)
-                tv += ((cp - pp) / dt) * w; tw += w
-        if tw > 0:
-            rv = tv / tw
-            st['speed'] += (float(np.linalg.norm(rv)) - st['speed']) * SMOOTH_ALPHA
-            st['hand_velocity'] += (rv - st['hand_velocity']) * SMOOTH_ALPHA
-        if st['speed'] > 1.5:
-            vn = st['hand_velocity'] / (st['speed'] + 0.0001)
-            dot = float(np.clip(np.dot(vn, st['last_direction']), -1, 1))
-            angle = np.arccos(dot)
-            st['curvature'] += (angle * min(st['speed'] / CURVATURE_REF, 1)
-                                - st['curvature']) * SMOOTH_ALPHA
-            st['last_direction'] = vn
-        else:
-            st['curvature'] *= 0.85
-        if len(recent) >= 3:
-            np_ct = recent[0]; op_ot = recent[min(len(recent) - 1, 5)]
-            zdt = np_ct[1] - op_ot[1]
-            if zdt > 0.01:
-                st['z_velocity'] += ((np_ct[0][1] - op_ot[0][1]) / zdt
-                                     - st['z_velocity']) * SMOOTH_ALPHA
+# MotionAnalyzer 从 yan_gua.motion 导入 (顶部 import)
 
 
 # ============================================================

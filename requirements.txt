@@ -1,11 +1,15 @@
-# yan_gua.py (py5 水墨版 — 主程序, 需要 JDK 17)
-py5>=0.10.0
-opencv-python>=4.8.0
-mediapipe>=0.10.0
-numpy>=1.24.0
-taichi>=1.7.0
+# 演卦 · 星尘太极 (Stardust Taichi)
+# 太极手势驱动的星尘粒子实时交互系统
+#
+# 安装: pip install -r requirements.txt
+# 运行: python -m yan_gua  或 双击 run.bat (Windows)
+#
+# 核心依赖:
+py5>=0.10.0          # Processing Python — 实时渲染
+opencv-python>=4.8.0 # 摄像头 + 图像处理
+mediapipe>=0.10.0    # 手部/骨架检测
+numpy>=1.24.0        # 数组计算
+taichi>=1.7.0        # GPU 粒子物理 (CUDA)
 
-# main.py (OpenGL 3D 版 — 已废弃)
-# pygame>=2.5.0
-# moderngl>=5.8.0
+# 视频离线渲染 (scripts/render_video.py)
 # opencv-python, mediapipe, numpy 同上
