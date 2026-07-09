@@ -31,8 +31,8 @@ dependencies = [
 dev = [
     "coverage[toml]>=7.6,<8",
     "pre-commit>=4,<5",
-    "pytest>=8,<9",
-    "pytest-cov>=6,<7",
+    "pytest>=8,<10",
+    "pytest-cov>=6,<8",
     "ruff>=0.11,<1",
 ]
 
