@@ -29,6 +29,7 @@ from yan_gua.config import (
 from yan_gua.motion import MotionAnalyzer
 from yan_gua.offline_renderer import ParticleFrameRenderer
 from yan_gua.physics import CloudParticles
+from yan_gua.runtime import TAICHI_ARCH_CHOICES, resolve_taichi_arch
 from yan_gua.vortex import VortexController, phase_label
 
 CANVAS_W, CANVAS_H = 640, 360
@@ -223,17 +224,16 @@ def parse_args():
     )
     parser.add_argument(
         "--arch",
-        choices=("auto", "cuda", "cpu"),
+        choices=TAICHI_ARCH_CHOICES,
         default="auto",
-        help="Taichi 后端（默认：auto）",
+        help="Taichi 后端（默认：auto；Apple Silicon 优先使用 Metal）",
     )
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
-    arch_map = {"auto": ti.gpu, "cuda": ti.cuda, "cpu": ti.cpu}
-    arch = arch_map[args.arch]
+    arch = resolve_taichi_arch(args.arch, ti)
 
     frames = {}
     for hand_gen, key, seed in QUAD_CONFIGS:

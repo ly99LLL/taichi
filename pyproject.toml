@@ -11,11 +11,15 @@ requires-python = ">=3.11,<3.13"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "ly99LLL" }]
-keywords = ["taichi", "mediapipe", "generative-art", "computer-vision", "py5"]
+keywords = ["taichi", "mediapipe", "generative-art", "computer-vision", "apple-silicon", "py5"]
 classifiers = [
     "Development Status :: 4 - Beta",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: Implementation :: CPython",
     "Topic :: Artistic Software",
     "Topic :: Multimedia :: Graphics",
 ]
@@ -23,7 +27,7 @@ dependencies = [
     "mediapipe>=0.10.9,<0.11",
     "numpy>=1.24,<3",
     "opencv-python>=4.8,<6",
-    "py5>=0.10,<1",
+    "py5>=0.10.0a0,<1",
     "taichi>=1.7,<2",
 ]
 

@@ -5,7 +5,7 @@
 # 运行: python -m yan_gua  或 双击 run.bat (Windows)
 #
 # 核心依赖:
-py5>=0.10,<1             # Processing Python — 实时渲染
+py5>=0.10.0a0,<1         # Processing Python — 实时渲染（当前为 0.10 预发行版）
 opencv-python>=4.8,<6    # 摄像头 + 图像处理
 mediapipe>=0.10.9,<0.11  # 手部/骨架检测
 numpy>=1.24,<3           # 数组计算

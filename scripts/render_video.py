@@ -22,6 +22,7 @@ from yan_gua.config import (
     PARTICLE_COUNT,
     UI_BORDER,
 )
+from yan_gua.runtime import TAICHI_ARCH_CHOICES, initialize_taichi
 
 CANVAS_W, CANVAS_H = 1280, 720
 UI_BORDER_BGR = (UI_BORDER[2], UI_BORDER[1], UI_BORDER[0])
@@ -72,17 +73,16 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--arch",
-        choices=("auto", "cuda", "cpu"),
+        choices=TAICHI_ARCH_CHOICES,
         default="auto",
-        help="Taichi 后端（默认：auto）",
+        help="Taichi 后端（默认：auto；Apple Silicon 优先使用 Metal）",
     )
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
-    arch = {"auto": ti.gpu, "cuda": ti.cuda, "cpu": ti.cpu}[args.arch]
-    ti.init(arch=arch, random_seed=42)
+    initialize_taichi(args.arch, ti, random_seed=42)
 
     from yan_gua.camera_renderer import CameraRenderer
     from yan_gua.motion import MotionAnalyzer

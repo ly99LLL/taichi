@@ -16,6 +16,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from yan_gua.runtime import TAICHI_ARCH_CHOICES, initialize_taichi
+
 CANVAS_W, CANVAS_H = 1280, 720
 DEFAULT_DURATION = 10.0
 DEFAULT_FPS = 30.0
@@ -47,9 +49,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fps", type=float, default=DEFAULT_FPS)
     parser.add_argument(
         "--arch",
-        choices=("auto", "cuda", "cpu"),
+        choices=TAICHI_ARCH_CHOICES,
         default="auto",
-        help="Taichi 后端（默认：auto）",
+        help="Taichi 后端（默认：auto；Apple Silicon 优先使用 Metal）",
     )
     return parser.parse_args()
 
@@ -91,8 +93,7 @@ def synthetic_hands(timestamp: float) -> list[dict]:
 
 
 def init_taichi(arch_name: str) -> None:
-    arch = {"auto": ti.gpu, "cuda": ti.cuda, "cpu": ti.cpu}[arch_name]
-    ti.init(arch=arch, random_seed=42)
+    initialize_taichi(arch_name, ti, random_seed=42)
 
 
 def main() -> int:

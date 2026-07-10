@@ -32,6 +32,7 @@ hs_err_pid*.log
 
 # 本地输出与可能包含敏感内容的环境文件
 artifacts/
+/presentation/
 .env
 .env.*
 !.env.example

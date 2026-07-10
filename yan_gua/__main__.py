@@ -9,7 +9,7 @@
 import argparse
 from pathlib import Path
 
-from yan_gua.runtime import ensure_java_17
+from yan_gua.runtime import TAICHI_ARCH_CHOICES, ensure_java_17, initialize_taichi
 
 # py5 导入前验证环境；保留用户已有的 JAVA_HOME。
 ensure_java_17()
@@ -31,35 +31,6 @@ from yan_gua.sketch import (
     settings,
     setup,
 )
-
-_ARCH_MAP = {
-    "auto": ti.gpu,
-    "cuda": ti.cuda,
-    "cpu": ti.cpu,
-    "vulkan": ti.vulkan,
-    "metal": ti.metal,
-    "opengl": ti.opengl,
-}
-
-
-def _resolve_arch(name: str):
-    """将 --arch 名称解析为 Taichi 后端；无法使用时给出明确错误。"""
-    backend = _ARCH_MAP.get(name)
-    if backend is None:
-        choices = ", ".join(sorted(_ARCH_MAP))
-        raise SystemExit(f"不支持的后端: {name}。可用选项: {choices}")
-
-    label = name
-    if name == "auto":
-        try:
-            backend = ti.gpu
-            label = "gpu (auto)"
-        except Exception:
-            backend = ti.cpu
-            label = "cpu (GPU 不可用，已自动退回)"
-
-    print(f"Taichi 后端: {label}")
-    return backend
 
 
 def _warmup():
@@ -109,9 +80,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="演卦 · 双生涡场")
     parser.add_argument(
         "--arch",
-        choices=sorted(_ARCH_MAP),
+        choices=TAICHI_ARCH_CHOICES,
         default="auto",
-        help="Taichi 计算后端（默认：auto 自动选择 GPU，不可用时退回 CPU）",
+        help="Taichi 计算后端（默认：auto；Apple Silicon 优先使用 Metal）",
     )
     parser.add_argument(
         "--video",
@@ -136,8 +107,7 @@ if __name__ == "__main__":
         parser.error("--record 目前需要与 --video 一起使用")
 
     # 解析并初始化 Taichi 后端（必须早于 kernel 调用和 py5 渲染线程）。
-    arch = _resolve_arch(args.arch)
-    ti.init(arch=arch, random_seed=42)
+    initialize_taichi(args.arch, ti, random_seed=42)
 
     configure_input(args.video, args.record, mirror_video=not args.no_mirror)
     _warmup()
