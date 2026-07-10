@@ -5,7 +5,8 @@ Discussion/Issue 对齐设计方向。
 
 ## 本地开发
 
-需要 Python 3.11 或 3.12、JDK 17。实时渲染需要 NVIDIA GPU；默认测试不需要 CUDA。
+需要 Python 3.11 或 3.12、JDK 17 或更高版本。实时渲染建议使用 Metal、CUDA 或 Vulkan
+后端；CPU 模式和默认测试不需要独立显卡。
 
 ```bash
 python -m venv .venv
