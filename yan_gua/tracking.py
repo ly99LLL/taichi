@@ -7,6 +7,8 @@
 CLAHE 增强用于改善低对比度画面的关键点检测条件。
 """
 
+import os
+
 import cv2
 import mediapipe as mp
 
@@ -21,9 +23,13 @@ from yan_gua.config import (
     HANDS_TRACKING_CONFIDENCE,
     POSE_DETECTION_CONFIDENCE,
     POSE_MODEL_COMPLEXITY,
+    POSE_REFINE_MAX_DISTANCE,
     POSE_TRACKING_CONFIDENCE,
     POSE_WRIST_VISIBILITY,
 )
+
+# Windows 用 DirectShow 避免摄像头启动延迟；其他平台由 OpenCV 自选后端。
+_CAMERA_BACKEND = cv2.CAP_DSHOW if os.name == "nt" else cv2.CAP_ANY
 
 
 class HandTracker:
@@ -59,7 +65,7 @@ class HandTracker:
             self.cap = cv2.VideoCapture(video_path)
             self._is_video = True
         else:
-            self.cap = cv2.VideoCapture(camera_id, cv2.CAP_DSHOW)
+            self.cap = cv2.VideoCapture(camera_id, _CAMERA_BACKEND)
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
             self.cap.set(cv2.CAP_PROP_FPS, fps)
@@ -152,20 +158,75 @@ class HandTracker:
                 )
 
         # Pose 腕关节降级 — Hands 检测不到时使用
-        if not hands and pose_lms:
-            for wrist_id in (15, 16):  # left_wrist, right_wrist
-                lm = pose_lms.landmark[wrist_id]
-                if lm.visibility > POSE_WRIST_VISIBILITY:
-                    hands.append(
-                        {
-                            "id_hint": "Left" if wrist_id == 15 else "Right",
-                            "id_confidence": float(lm.visibility),
-                            "palm_center": {"x": lm.x, "y": lm.y, "z": lm.z},
-                            "landmarks": [],
-                        }
-                    )
+        if pose_lms and 0 < len(hands) < 2:
+            self._refine_single_hand_hint_from_pose(hands, pose_lms)
+            self._append_pose_wrist_fallbacks(hands, pose_lms)
 
         return frame, (hands if hands else None), pose_lms
+
+    @staticmethod
+    def _refine_single_hand_hint_from_pose(hands, pose_lms):
+        if len(hands) != 1:
+            return
+
+        hand = hands[0]
+        palm = hand.get("palm_center")
+        if not palm:
+            return
+
+        candidates = []
+        for wrist_id, label in ((15, "Left"), (16, "Right")):
+            lm = pose_lms.landmark[wrist_id]
+            if lm.visibility <= POSE_WRIST_VISIBILITY:
+                continue
+            dx = float(palm["x"]) - float(lm.x)
+            dy = float(palm["y"]) - float(lm.y)
+            candidates.append((dx * dx + dy * dy, label, float(lm.visibility)))
+
+        if not candidates:
+            return
+
+        candidates.sort(key=lambda item: item[0])
+        nearest_distance, nearest_label, visibility = candidates[0]
+        current_confidence = float(hand.get("id_confidence", 0.0))
+        current_hint = str(hand.get("id_hint", "")).strip().lower()
+        nearest_key = nearest_label.lower()
+
+        if (
+            nearest_distance < POSE_REFINE_MAX_DISTANCE**2
+            and visibility >= current_confidence * 0.72
+            and current_hint != nearest_key
+        ):
+            hand["id_hint"] = nearest_label
+            hand["id_confidence"] = max(current_confidence, visibility * 0.92)
+            hand["pose_refined"] = True
+
+    @staticmethod
+    def _append_pose_wrist_fallbacks(hands, pose_lms):
+        existing_hints = {
+            str(hand.get("id_hint", "")).strip().lower() for hand in hands if hand.get("id_hint")
+        }
+        wrist_candidates = [(15, "Left"), (16, "Right")]
+        if len(existing_hints) == 1:
+            missing = "right" if "left" in existing_hints else "left"
+            wrist_candidates.sort(key=lambda item: item[1].lower() != missing)
+
+        for wrist_id, label in wrist_candidates:
+            if len(hands) >= 2:
+                break
+
+            lm = pose_lms.landmark[wrist_id]
+            if lm.visibility <= POSE_WRIST_VISIBILITY:
+                continue
+
+            hands.append(
+                {
+                    "id_hint": label,
+                    "id_confidence": float(lm.visibility),
+                    "palm_center": {"x": lm.x, "y": lm.y, "z": lm.z},
+                    "landmarks": [],
+                }
+            )
 
     def release(self):
         """释放摄像头和 MediaPipe 资源。"""

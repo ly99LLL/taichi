@@ -15,7 +15,11 @@ from yan_gua.config import (
     VORTEX_ECHO_SECONDS,
     VORTEX_FORM_SECONDS,
     VORTEX_MAX_DRIFT_SPEED,
+    VORTEX_POSITION_RESPONSE_SECONDS,
     VORTEX_SLOW_SPEED,
+    VORTEX_STOP_SPLASH_DECAY_SECONDS,
+    VORTEX_STOP_SPLASH_SPEED,
+    VORTEX_VELOCITY_RESPONSE_SECONDS,
 )
 
 
@@ -31,6 +35,20 @@ def _approach(current: float, target: float, dt: float, seconds: float) -> float
         return target
     blend = 1.0 - math.exp(-max(dt, 0.0) / seconds)
     return current + (target - current) * blend
+
+
+def phase_label(vortices: list[dict]) -> str:
+    """返回当前涡场阶段的人可读标签，供实时与离线渲染共用。"""
+    phases = {field["phase"] for field in vortices if field["active"]}
+    if "dispersing" in phases:
+        return "FAST / BREAK"
+    if "echo" in phases:
+        return "ECHO / RELEASE"
+    if "holding" in phases:
+        return "SLOW / HOLD"
+    if "forming" in phases:
+        return "FORMING"
+    return "DORMANT"
 
 
 class VortexController:
@@ -54,6 +72,8 @@ class VortexController:
             "maturity": 0.0,
             "aperture": 0.0,
             "spin": 1.0 if slot == 0 else -1.0,
+            "splash": 0.0,
+            "previous_speed": 0.0,
             "missing_time": math.inf,
             "observed": False,
             "active": False,
@@ -99,23 +119,39 @@ class VortexController:
             field["position"] = target.copy()
             field["maturity"] = 0.0
         else:
-            position_blend = 1.0 - math.exp(-dt / 0.065)
+            position_blend = 1.0 - math.exp(-dt / VORTEX_POSITION_RESPONSE_SECONDS)
             field["position"] += (target - field["position"]) * position_blend
 
         raw_velocity = np.asarray(hand.get("hand_velocity", (0.0, 0.0)), dtype=np.float32)
         speed = float(np.linalg.norm(raw_velocity))
         if speed > VORTEX_MAX_DRIFT_SPEED:
             raw_velocity *= VORTEX_MAX_DRIFT_SPEED / max(speed, 0.001)
-        velocity_blend = 1.0 - math.exp(-dt / 0.12)
+        velocity_blend = 1.0 - math.exp(-dt / VORTEX_VELOCITY_RESPONSE_SECONDS)
         field["velocity"] += (raw_velocity - field["velocity"]) * velocity_blend
 
+        tracked_speed = speed
         speed = float(hand.get("speed", speed))
+        previous_speed = float(field.get("previous_speed", speed))
+        sudden_stop = 0.0
+        if previous_speed > VORTEX_STOP_SPLASH_SPEED and speed < previous_speed:
+            sudden_stop = min(
+                (previous_speed - speed) / max(VORTEX_STOP_SPLASH_SPEED, 0.001),
+                1.0,
+            )
+        field["splash"] = max(
+            field["splash"] * math.exp(-dt / VORTEX_STOP_SPLASH_DECAY_SECONDS),
+            sudden_stop,
+        )
+        field["previous_speed"] = max(speed, tracked_speed)
+
         breakup = _smoothstep(VORTEX_SLOW_SPEED, VORTEX_BREAK_SPEED, speed)
         target_coherence = 1.0 - breakup
 
         field["coherence"] = _approach(field["coherence"], target_coherence, dt, 0.18)
         field["scatter"] = _approach(field["scatter"], breakup, dt, 0.11)
-        field["strength"] = _approach(field["strength"], 1.0, dt, VORTEX_FORM_SECONDS * 0.45)
+        # 解旋时涡场组织力减弱，避免其散射爆发淹没另一只慢手的相干涡旋。
+        target_strength = 1.0 - field["scatter"] * 0.55
+        field["strength"] = _approach(field["strength"], target_strength, dt, 0.22)
         field["maturity"] = min(1.0, field["maturity"] + dt / VORTEX_FORM_SECONDS)
         field["release"] = 0.0
         field["missing_time"] = 0.0
@@ -140,6 +176,7 @@ class VortexController:
         field["missing_time"] += dt
         field["position"] += field["velocity"] * dt * 0.22
         field["velocity"] *= math.exp(-dt / 0.65)
+        field["splash"] *= math.exp(-dt / VORTEX_STOP_SPLASH_DECAY_SECONDS)
         field["strength"] *= math.exp(-dt / VORTEX_ECHO_SECONDS)
         field["coherence"] = _approach(field["coherence"], 0.58, dt, 0.85)
         field["scatter"] *= math.exp(-dt / 0.28)

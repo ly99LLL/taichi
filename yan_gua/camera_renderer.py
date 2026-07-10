@@ -239,6 +239,9 @@ class CameraRenderer:
 
             if palm is not None:
                 orbit_radius = self._palm_orbit_radius(points)
+                if hand.get("predicted"):
+                    orbit_radius = max(orbit_radius, 14)
+                    self._draw_motion_memory(glow, crisp, palm, hand, color, light, w, h)
                 self._draw_palm_orbit(
                     glow,
                     crisp,
@@ -252,6 +255,28 @@ class CameraRenderer:
         blurred = cv2.GaussianBlur(glow, (CAM_BRUSH_BLUR, CAM_BRUSH_BLUR), 0)
         result = cv2.addWeighted(img, 1.0, blurred, CAM_BRUSH_OPACITY, 0)
         return cv2.addWeighted(result, 1.0, crisp, 0.72, 0)
+
+    @staticmethod
+    def _draw_motion_memory(glow, crisp, palm, hand, color, light, w, h):
+        velocity = hand.get("velocity") or {}
+        vx = float(velocity.get("x", 0.0)) * w
+        vy = float(velocity.get("y", 0.0)) * h
+        speed = float(np.hypot(vx, vy))
+        if speed < 0.01:
+            cv2.circle(glow, palm, 18, color, 2, cv2.LINE_AA)
+            return
+
+        tail = min(max(speed * 0.18, 10.0), 34.0)
+        unit_x = vx / speed
+        unit_y = vy / speed
+        for index, scale in enumerate((1.0, 0.62, 0.34)):
+            end = (
+                int(np.clip(palm[0] - unit_x * tail * scale, 0, w - 1)),
+                int(np.clip(palm[1] - unit_y * tail * scale, 0, h - 1)),
+            )
+            width = max(1, 4 - index)
+            cv2.line(glow, palm, end, color, width + 2, cv2.LINE_AA)
+            cv2.line(crisp, palm, end, light, width, cv2.LINE_AA)
 
     @classmethod
     def _hand_colors(cls, hand, hand_index):

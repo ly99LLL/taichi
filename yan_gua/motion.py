@@ -13,8 +13,11 @@ import numpy as np
 
 from yan_gua.config import (
     CURVATURE_REF,
+    FAST_LOST_PREDICT_SECONDS,
+    FAST_LOST_PREDICT_SPEED,
     HISTORY_SIZE,
     REACQUIRE_GAP_SECONDS,
+    SHORT_LOST_MAINTAIN_SECONDS,
     SMOOTH_ALPHA,
 )
 
@@ -22,6 +25,8 @@ from yan_gua.config import (
 class MotionAnalyzer:
     """追踪两只手的稳定身份，并提取连续运动特征。"""
 
+    # _associate 使用 permutations() 做最小匹配, 复杂度 O((MAX_HANDS!)²)。
+    # 当前值 2 时只有 4 种组合, 增大此值前需将关联算法改为匈牙利算法。
     MAX_HANDS = 2
 
     def __init__(self, win_w: int, win_h: int):
@@ -38,6 +43,7 @@ class MotionAnalyzer:
             obs = assignments.get(slot)
             state["newly_acquired"] = False
             state["observed"] = obs is not None
+            state["predicted"] = False
 
             if obs is not None:
                 gap = (
@@ -55,16 +61,15 @@ class MotionAnalyzer:
 
                 state["id_hint"] = obs["id_hint"] or state["id_hint"]
                 state["hand_world_pos"] = obs["position"].copy()
+                state["last_observed_pos"] = obs["position"].copy()
                 state["history"].append((obs["position"].copy(), obs["depth"], float(timestamp)))
                 state["last_seen_time"] = float(timestamp)
+                state["last_update_time"] = float(timestamp)
                 state["presence_counter"] = min(state["presence_counter"] + 2, 8)
+                state["tracking_confidence"] = 1.0
                 self._compute_features(state)
             else:
-                state["presence_counter"] = max(state["presence_counter"] - 1, 0)
-                state["speed"] *= 0.86
-                state["curvature"] *= 0.82
-                state["z_velocity"] *= 0.82
-                state["hand_velocity"] *= 0.86
+                self._predict_or_decay(state, float(timestamp))
 
             # hand_detected 是供 UI 使用的短迟滞；物理生命周期使用 observed。
             state["hand_detected"] = state["presence_counter"] > 0
@@ -157,13 +162,70 @@ class MotionAnalyzer:
             "z_velocity": 0.0,
             "hand_velocity": np.zeros(2, dtype=np.float32),
             "hand_world_pos": None,
+            "last_observed_pos": None,
             "last_direction": np.zeros(2, dtype=np.float32),
             "last_seen_time": None,
+            "last_update_time": None,
             "observed": False,
+            "predicted": False,
             "newly_acquired": False,
             "hand_detected": False,
             "presence_counter": 0,
+            "tracking_confidence": 0.0,
         }
+
+    def _predict_or_decay(self, state: dict, timestamp: float) -> None:
+        gap = (
+            timestamp - state["last_seen_time"]
+            if state["last_seen_time"] is not None
+            else float("inf")
+        )
+
+        # 短时宽限期：任何刚丢失的手先原地保持最后一帧位置。
+        # 防止另一只快手造成 MediaPipe 漏检时，慢手被立刻判死。
+        if state["hand_world_pos"] is not None and gap <= SHORT_LOST_MAINTAIN_SECONDS:
+            state["observed"] = True
+            state["presence_counter"] = max(state["presence_counter"], 2)
+            state["tracking_confidence"] = max(0.30, 1.0 - gap / SHORT_LOST_MAINTAIN_SECONDS)
+            state["last_update_time"] = timestamp
+            state["speed"] *= 0.94
+            state["curvature"] *= 0.92
+            state["z_velocity"] *= 0.92
+            state["hand_velocity"] *= 0.94
+            return
+
+        can_predict = (
+            state["hand_world_pos"] is not None
+            and gap <= FAST_LOST_PREDICT_SECONDS
+            and state["speed"] >= FAST_LOST_PREDICT_SPEED
+        )
+
+        if can_predict:
+            previous_update = state["last_update_time"]
+            step_dt = timestamp - previous_update if previous_update is not None else 1.0 / 60.0
+            step_dt = min(max(step_dt, 0.0), 1.0 / 24.0)
+            predicted_pos = state["hand_world_pos"] + state["hand_velocity"] * step_dt * 0.82
+            predicted_pos[0] = np.clip(predicted_pos[0], 0.0, float(self.win_w))
+            predicted_pos[1] = np.clip(predicted_pos[1], 0.0, float(self.win_h))
+
+            state["hand_world_pos"] = predicted_pos.astype(np.float32)
+            state["observed"] = True
+            state["predicted"] = True
+            state["presence_counter"] = max(state["presence_counter"], 2)
+            state["tracking_confidence"] = max(0.18, 1.0 - gap / FAST_LOST_PREDICT_SECONDS)
+            state["last_update_time"] = timestamp
+            state["speed"] *= 0.92
+            state["curvature"] *= 0.9
+            state["z_velocity"] *= 0.9
+            state["hand_velocity"] *= 0.92
+            return
+
+        state["presence_counter"] = max(state["presence_counter"] - 1, 0)
+        state["speed"] *= 0.86
+        state["curvature"] *= 0.82
+        state["z_velocity"] *= 0.82
+        state["hand_velocity"] *= 0.86
+        state["tracking_confidence"] *= 0.55
 
     @staticmethod
     def _compute_features(state: dict) -> None:

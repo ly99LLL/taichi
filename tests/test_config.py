@@ -13,11 +13,18 @@ def test_cinematic_palette():
 
 
 def test_vortex_constants():
-    assert cfg.PARTICLE_COUNT == 6000
+    assert cfg.PARTICLE_COUNT == 7200
+    assert cfg.PARTICLE_SIZE_MIN >= 1.0
+    assert cfg.PARTICLE_SIZE_MAX > 3.0
     assert cfg.VORTEX_ORBIT_RADIUS < cfg.VORTEX_INFLUENCE_RADIUS
     assert cfg.VORTEX_SLOW_SPEED < cfg.VORTEX_BREAK_SPEED
-    assert cfg.VORTEX_FORM_SECONDS > 0
+    assert 0 < cfg.VORTEX_FORM_SECONDS <= 0.25
     assert cfg.VORTEX_ECHO_SECONDS > cfg.VORTEX_FORM_SECONDS
+    assert cfg.VORTEX_HAND_CARRY > 0.7
+    assert cfg.VORTEX_STOP_SPLASH_SPEED > 0
+    assert 0 < cfg.FAST_LOST_PREDICT_SECONDS < 0.3
+    assert cfg.FAST_LOST_PREDICT_SPEED > cfg.VORTEX_SLOW_SPEED
+    assert 0 < cfg.SHORT_LOST_MAINTAIN_SECONDS < cfg.FAST_LOST_PREDICT_SECONDS
     assert cfg.INFLUENCE_RADIUS == cfg.VORTEX_INFLUENCE_RADIUS
     assert 0 < cfg.BASE_DAMPING < 1
     assert cfg.TRAIL_ALPHA > 0

@@ -64,3 +64,20 @@ def test_pose_fallback_palm_still_gets_recognition_orbit():
     with_effect = renderer._draw_hand_effect(baseline.copy(), [hand])
 
     assert not np.array_equal(with_effect[28:53, 38:63], baseline[28:53, 38:63])
+
+
+def test_predicted_hand_draws_motion_memory_orbit():
+    renderer = CameraRenderer(cam_w=100, cam_h=80)
+    frame = np.full((80, 100, 3), (50, 80, 120), dtype=np.uint8)
+    hand = {
+        "id_hint": "Left",
+        "palm_center": {"x": 0.5, "y": 0.5, "z": 0.0},
+        "landmarks": [],
+        "predicted": True,
+        "velocity": {"x": 0.8, "y": 0.0},
+    }
+
+    baseline = renderer._vignette(renderer._preserve_color(frame))
+    with_effect = renderer._draw_hand_effect(baseline.copy(), [hand])
+
+    assert not np.array_equal(with_effect[36:45, 18:52], baseline[36:45, 18:52])

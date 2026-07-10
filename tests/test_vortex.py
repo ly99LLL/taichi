@@ -70,3 +70,30 @@ def test_two_hands_have_opposite_spin():
         1 / 60,
     )
     assert fields[0]["spin"] == -fields[1]["spin"]
+
+
+def test_vortex_center_follows_slow_hand_without_sluggish_lag():
+    controller = VortexController()
+    for _ in range(30):
+        controller.update([hand_state(position=(400.0, 300.0))], 1 / 60)
+
+    fields = controller.update(
+        [hand_state(speed=60.0, position=(500.0, 300.0))],
+        1 / 60,
+    )
+
+    assert 430.0 < fields[0]["position"][0] < 500.0
+    assert fields[0]["coherence"] > 0.9
+
+
+def test_sudden_stop_keeps_short_splash_impulse():
+    controller = VortexController()
+    for _ in range(12):
+        controller.update([hand_state(speed=260.0)], 1 / 60)
+
+    fields = controller.update([hand_state(speed=0.0)], 1 / 60)
+    assert fields[0]["splash"] > 0.4
+
+    for _ in range(40):
+        fields = controller.update([hand_state(speed=0.0)], 1 / 60)
+    assert fields[0]["splash"] < 0.2

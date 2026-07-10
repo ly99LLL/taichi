@@ -55,11 +55,49 @@ def test_presence_hysteresis():
     for t in range(3):
         ma.process(hand_data, float(t) * 0.016)
 
-    # 一帧无手
-    results = ma.process(None, 0.05)
-    # 应该仍然 detected (presence_counter 从 3 降到 2, still >= 1)
+    # 丢失 0.20s — 超过宽限期 (0.16s) 但在 presence_counter 迟滞内
+    results = ma.process(None, 3 * 0.016 + 0.20)
     assert results[0]["hand_detected"] is True
     assert results[0]["observed"] is False
+
+
+def test_fast_loss_uses_short_motion_prediction():
+    """高速运动后短时丢检：宽限期先维持位置，之后进入预测补位。"""
+    ma = MotionAnalyzer(1000, 500)
+    for i in range(12):
+        hand_data = [
+            {
+                "palm_center": {"x": 0.2 + i * 0.045, "y": 0.5, "z": 0.0},
+                "landmarks": [],
+            }
+        ]
+        ma.process(hand_data, i * 0.016)
+
+    before_x = float(ma.states[0]["hand_world_pos"][0])
+    # 丢失 0.19s — 超过宽限期 (0.16s), 但还在高速预测窗口 (0.22s) 内
+    results = ma.process(None, 12 * 0.016 + 0.19)
+
+    assert results[0]["observed"] is True
+    assert results[0]["predicted"] is True
+    assert float(results[0]["hand_world_pos"][0]) > before_x
+
+
+def test_motion_prediction_expires_quickly():
+    ma = MotionAnalyzer(1000, 500)
+    for i in range(8):
+        ma.process(
+            [
+                {
+                    "palm_center": {"x": 0.2 + i * 0.045, "y": 0.5, "z": 0.0},
+                    "landmarks": [],
+                }
+            ],
+            i * 0.016,
+        )
+
+    results = ma.process(None, 0.5)
+    assert results[0]["observed"] is False
+    assert results[0]["predicted"] is False
 
 
 def test_features_with_movement():
@@ -165,3 +203,42 @@ def test_reacquisition_clears_stale_velocity_history():
 
     assert states[0]["newly_acquired"] is True
     assert states[0]["speed"] == 0.0
+
+
+def test_slow_hand_maintains_position_during_brief_dropout():
+    """慢手短暂丢检时应保持位置，不被另一只快手拖累消散。"""
+    ma = MotionAnalyzer(1000, 500)
+    hand = {
+        "id_hint": "Left",
+        "palm_center": {"x": 0.3, "y": 0.5, "z": 0.0},
+        "landmarks": [],
+    }
+    for i in range(10):
+        ma.process([hand], i * 0.016)
+
+    before_x = float(ma.states[0]["hand_world_pos"][0])
+    # 模拟另一只快手导致 2 帧漏检（~32ms, 在 0.10s 宽限内）
+    states = ma.process(None, 10 * 0.016)
+
+    assert states[0]["observed"] is True
+    assert states[0]["predicted"] is False  # 慢手不预测轨迹, 只保持位置
+    assert float(states[0]["hand_world_pos"][0]) == before_x
+    assert states[0]["hand_detected"] is True
+
+
+def test_brief_maintain_expires_and_decays_normally():
+    """宽限期过后仍未检测到, 应按正常逻辑衰减。"""
+    ma = MotionAnalyzer(1000, 500)
+    hand = {
+        "id_hint": "Right",
+        "palm_center": {"x": 0.7, "y": 0.5, "z": 0.0},
+        "landmarks": [],
+    }
+    for i in range(10):
+        ma.process([hand], i * 0.016)
+
+    # 宽限期 0.16s, 丢失 0.22s → 应该已经进入衰减
+    states = ma.process(None, 10 * 0.016 + 0.22)
+
+    assert states[0]["observed"] is False
+    assert states[0]["speed"] < 1.0  # 速度已衰减

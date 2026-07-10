@@ -37,7 +37,7 @@ def test_read_preserves_real_z_coordinate():
     assert hands[0]["palm_center"]["z"] == (-0.0 - 0.09) / 2
 
 
-def test_pose_wrist_is_used_as_fallback():
+def test_pose_wrist_is_not_used_when_hands_detects_nothing():
     hidden = SimpleNamespace(x=0.0, y=0.0, z=0.0, visibility=0.0)
     landmarks = [hidden for _ in range(33)]
     landmarks[15] = SimpleNamespace(x=0.3, y=0.4, z=-0.2, visibility=0.9)
@@ -47,14 +47,70 @@ def test_pose_wrist_is_used_as_fallback():
     _, hands, returned_pose = tracker.read()
 
     assert returned_pose is pose
-    assert hands == [
-        {
-            "id_hint": "Left",
-            "id_confidence": 0.9,
-            "palm_center": {"x": 0.3, "y": 0.4, "z": -0.2},
-            "landmarks": [],
-        }
-    ]
+    assert hands is None
+
+
+def test_pose_fallback_fills_missing_second_hand():
+    hand_landmarks = [SimpleNamespace(x=0.75, y=0.5, z=-0.01) for _ in range(21)]
+    hand_result = SimpleNamespace(
+        multi_hand_landmarks=[SimpleNamespace(landmark=hand_landmarks)],
+        multi_handedness=[
+            SimpleNamespace(classification=[SimpleNamespace(label="Right", score=0.96)])
+        ],
+    )
+    hidden = SimpleNamespace(x=0.0, y=0.0, z=0.0, visibility=0.0)
+    landmarks = [hidden for _ in range(33)]
+    landmarks[15] = SimpleNamespace(x=0.25, y=0.45, z=-0.2, visibility=0.82)
+    landmarks[16] = SimpleNamespace(x=0.75, y=0.5, z=-0.1, visibility=0.9)
+    pose = SimpleNamespace(landmark=landmarks)
+    tracker = _tracker(hand_result, pose)
+
+    _, hands, _ = tracker.read()
+
+    assert len(hands) == 2
+    assert hands[0]["id_hint"] == "Right"
+    assert hands[1]["id_hint"] == "Left"
+    assert hands[1]["landmarks"] == []
+
+
+def test_pose_refines_wrong_single_hand_label_before_fallback():
+    hand_landmarks = [SimpleNamespace(x=0.26, y=0.45, z=-0.01) for _ in range(21)]
+    hand_result = SimpleNamespace(
+        multi_hand_landmarks=[SimpleNamespace(landmark=hand_landmarks)],
+        multi_handedness=[
+            SimpleNamespace(classification=[SimpleNamespace(label="Right", score=0.6)])
+        ],
+    )
+    hidden = SimpleNamespace(x=0.0, y=0.0, z=0.0, visibility=0.0)
+    landmarks = [hidden for _ in range(33)]
+    landmarks[15] = SimpleNamespace(x=0.25, y=0.45, z=-0.2, visibility=0.9)
+    landmarks[16] = SimpleNamespace(x=0.78, y=0.46, z=-0.1, visibility=0.86)
+    pose = SimpleNamespace(landmark=landmarks)
+    tracker = _tracker(hand_result, pose)
+
+    _, hands, _ = tracker.read()
+
+    assert len(hands) == 2
+    assert hands[0]["id_hint"] == "Left"
+    assert hands[0]["pose_refined"] is True
+    assert hands[1]["id_hint"] == "Right"
+
+
+def test_pose_fallback_allows_overlapping_second_hand_effect():
+    hand_landmarks = [SimpleNamespace(x=0.2, y=0.4, z=0.0) for _ in range(21)]
+    hand_result = SimpleNamespace(multi_hand_landmarks=[SimpleNamespace(landmark=hand_landmarks)])
+    hidden = SimpleNamespace(x=0.0, y=0.0, z=0.0, visibility=0.0)
+    landmarks = [hidden for _ in range(33)]
+    landmarks[15] = SimpleNamespace(x=0.2, y=0.4, z=-0.1, visibility=0.9)
+    landmarks[16] = SimpleNamespace(x=0.82, y=0.42, z=-0.1, visibility=0.88)
+    pose = SimpleNamespace(landmark=landmarks)
+    tracker = _tracker(hand_result, pose)
+
+    _, hands, _ = tracker.read()
+
+    assert len(hands) == 2
+    assert hands[0]["id_hint"] == "Left"
+    assert hands[1]["id_hint"] == "Right"
 
 
 def test_failed_read_returns_empty_result():

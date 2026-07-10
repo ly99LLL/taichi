@@ -1,6 +1,7 @@
 """无摄像头合成演示的确定性输入测试。"""
 
-from scripts.render_demo import phase_label, synthetic_hands
+from scripts.render_demo import synthetic_hands
+from yan_gua.vortex import phase_label
 
 
 def test_synthetic_demo_uses_stable_hand_slots():

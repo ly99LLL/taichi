@@ -2,6 +2,7 @@
 
 用法:
     python -m yan_gua
+    python -m yan_gua --arch cpu
     python -m yan_gua --video 参考视频.mp4 --record 主程序直录.mp4
 """
 
@@ -13,13 +14,9 @@ from yan_gua.runtime import ensure_java_17
 # py5 导入前验证环境；保留用户已有的 JAVA_HOME。
 ensure_java_17()
 
-# ---- Taichi GPU 初始化 (纯计算, 不开启 GUI 窗口) ----
-import taichi as ti
-
-ti.init(arch=ti.cuda, random_seed=42)
-
 import numpy as np
 import py5
+import taichi as ti
 
 from yan_gua.physics import _particle_physics_kernel
 
@@ -35,14 +32,43 @@ from yan_gua.sketch import (
     setup,
 )
 
+_ARCH_MAP = {
+    "auto": ti.gpu,
+    "cuda": ti.cuda,
+    "cpu": ti.cpu,
+    "vulkan": ti.vulkan,
+    "metal": ti.metal,
+    "opengl": ti.opengl,
+}
+
+
+def _resolve_arch(name: str):
+    """将 --arch 名称解析为 Taichi 后端；无法使用时给出明确错误。"""
+    backend = _ARCH_MAP.get(name)
+    if backend is None:
+        choices = ", ".join(sorted(_ARCH_MAP))
+        raise SystemExit(f"不支持的后端: {name}。可用选项: {choices}")
+
+    label = name
+    if name == "auto":
+        try:
+            backend = ti.gpu
+            label = "gpu (auto)"
+        except Exception:
+            backend = ti.cpu
+            label = "cpu (GPU 不可用，已自动退回)"
+
+    print(f"Taichi 后端: {label}")
+    return backend
+
 
 def _warmup():
-    """GPU kernel 预热 — 必须在主线程、py5.run_sketch() 之前完成。
+    """kernel 预热 — 必须在主线程、py5.run_sketch() 之前完成。
 
-    Taichi CUDA kernel 编译发生在首次调用时, 必须在主线程完成。
+    Taichi kernel 编译发生在首次调用时, 必须在主线程完成。
     py5 的渲染线程不是主线程, 所以需要提前编译。
     """
-    print("GPU kernel warmup...", end=" ", flush=True)
+    print("Kernel warmup...", end=" ", flush=True)
     _n_warm = 100
     _warm_kwargs = dict(
         px=np.random.uniform(0, 1280, _n_warm).astype(np.float32),
@@ -65,6 +91,7 @@ def _warmup():
         hrelease_arr=np.zeros(2, dtype=np.float32),
         hmaturity_arr=np.array([1.0, 0.0], dtype=np.float32),
         haperture_arr=np.zeros(2, dtype=np.float32),
+        hsplash_arr=np.zeros(2, dtype=np.float32),
         hspin_arr=np.array([1.0, -1.0], dtype=np.float32),
         hactive_arr=np.array([1, 0], dtype=np.int32),
         dt=0.016,
@@ -80,6 +107,12 @@ def _warmup():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="演卦 · 双生涡场")
+    parser.add_argument(
+        "--arch",
+        choices=sorted(_ARCH_MAP),
+        default="auto",
+        help="Taichi 计算后端（默认：auto 自动选择 GPU，不可用时退回 CPU）",
+    )
     parser.add_argument(
         "--video",
         metavar="PATH",
@@ -101,6 +134,10 @@ if __name__ == "__main__":
         parser.error(f"找不到输入视频: {args.video}")
     if args.record and not args.video:
         parser.error("--record 目前需要与 --video 一起使用")
+
+    # 解析并初始化 Taichi 后端（必须早于 kernel 调用和 py5 渲染线程）。
+    arch = _resolve_arch(args.arch)
+    ti.init(arch=arch, random_seed=42)
 
     configure_input(args.video, args.record, mirror_video=not args.no_mirror)
     _warmup()

@@ -182,6 +182,44 @@ def _draw_idle_prompt():
     py5.text("举手入场  ·  慢则成旋", 22, WINDOW_H - 8)
 
 
+def _camera_effect_hands(hands, hand_states):
+    display_hands = list(hands or [])
+    used_hints = {
+        str(hand.get("id_hint", "")).strip().lower()
+        for hand in display_hands
+        if hand.get("id_hint")
+    }
+
+    for state in hand_states:
+        if not state.get("predicted") or state.get("hand_world_pos") is None:
+            continue
+        hint = str(state.get("id_hint") or "").lower()
+        if hint in used_hints:
+            continue
+
+        position = state["hand_world_pos"]
+        velocity = state.get("hand_velocity", (0.0, 0.0))
+        display_hands.append(
+            {
+                "id_hint": hint.title(),
+                "id_confidence": state.get("tracking_confidence", 0.0),
+                "palm_center": {
+                    "x": max(0.0, min(1.0, float(position[0]) / WINDOW_W)),
+                    "y": max(0.0, min(1.0, float(position[1]) / WINDOW_H)),
+                    "z": 0.0,
+                },
+                "landmarks": [],
+                "predicted": True,
+                "velocity": {
+                    "x": float(velocity[0]) / WINDOW_W,
+                    "y": float(velocity[1]) / WINDOW_H,
+                },
+            }
+        )
+
+    return display_hands or None
+
+
 def _restart():
     global _tracker, _analyzer, _vortex_controller, _cloud, _cam_renderer
     global _last_time, _btn_flash, _source_frame_idx
@@ -268,9 +306,9 @@ def setup():
     py5.background(BG_R, BG_G, BG_B)
 
     _open_record_writer()
-    print("=== 演卦 · 双生涡场 (py5 + Taichi GPU) ===")
+    print("=== 演卦 · 双生涡场 (py5 + Taichi) ===")
     print("  慢则聚旋，快则解旋；失手留余涡，双手成流桥。")
-    print("  [ESC] quit  [F] fullscreen  [D] field data  [click] restart")
+    print("  [ESC] quit  [F] fullscreen  [D] debug  [click] restart")
 
 
 def draw():
@@ -295,9 +333,10 @@ def draw():
     observed = any(field["observed"] for field in vortices)
     any_field = any(field["active"] for field in vortices)
 
+    camera_hands = _camera_effect_hands(hands, hand_states)
     camera_image, camera_x, camera_y = _cam_renderer.process(
         frame,
-        hands,
+        camera_hands,
         pose_landmarks,
     )
 

@@ -73,6 +73,27 @@ def test_coherent_vortex_organises_and_brightens_nearby_dust():
     assert np.isfinite(cloud.vy).all()
 
 
+def test_forming_vortex_expands_particles_from_palm_core():
+    from yan_gua.physics import CloudParticles
+
+    cloud = CloudParticles(count=500, win_w=1280, win_h=720, seed=33)
+    angles = np.linspace(0, np.pi * 2, 80, endpoint=False)
+    cloud.px[:80] = 640 + np.cos(angles) * 8
+    cloud.py[:80] = 360 + np.sin(angles) * 8
+    cloud.vx[:80] = 0
+    cloud.vy[:80] = 0
+    before = float(np.hypot(cloud.px[:80] - 640, cloud.py[:80] - 360).mean())
+
+    field = vortex()
+    field["phase"] = "forming"
+    for step in range(18):
+        field["maturity"] = step / 18
+        cloud.update(1 / 60, [field])
+
+    after = float(np.hypot(cloud.px[:80] - 640, cloud.py[:80] - 360).mean())
+    assert after > before + 10
+
+
 def test_two_vortices_pack_into_fixed_identity_slots():
     from yan_gua.physics import CloudParticles
 
@@ -113,6 +134,7 @@ def test_physics_kernel_warmup():
         hrelease_arr=np.zeros(2, dtype=np.float32),
         hmaturity_arr=np.array([1.0, 0.0], dtype=np.float32),
         haperture_arr=np.zeros(2, dtype=np.float32),
+        hsplash_arr=np.zeros(2, dtype=np.float32),
         hspin_arr=np.array([1.0, -1.0], dtype=np.float32),
         hactive_arr=np.array([1, 0], dtype=np.int32),
         dt=0.016,

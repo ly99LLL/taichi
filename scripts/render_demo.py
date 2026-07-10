@@ -34,8 +34,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--poster",
         type=Path,
-        default=Path("docs/assets/yan-gua-demo.png"),
-        help="封面截图路径（默认：docs/assets/yan-gua-demo.png）",
+        default=Path("docs/assets/demo.png"),
+        help="封面截图路径（默认：docs/assets/demo.png）",
     )
     parser.add_argument(
         "--poster-time",
@@ -90,19 +90,6 @@ def synthetic_hands(timestamp: float) -> list[dict]:
     ]
 
 
-def phase_label(vortices: list[dict]) -> str:
-    phases = {field["phase"] for field in vortices if field["active"]}
-    if "dispersing" in phases:
-        return "FAST / BREAK"
-    if "echo" in phases:
-        return "ECHO / RELEASE"
-    if "holding" in phases:
-        return "SLOW / HOLD"
-    if "forming" in phases:
-        return "FORMING"
-    return "DORMANT"
-
-
 def init_taichi(arch_name: str) -> None:
     arch = {"auto": ti.gpu, "cuda": ti.cuda, "cpu": ti.cpu}[arch_name]
     ti.init(arch=arch, random_seed=42)
@@ -119,7 +106,7 @@ def main() -> int:
     from yan_gua.motion import MotionAnalyzer
     from yan_gua.offline_renderer import ParticleFrameRenderer
     from yan_gua.physics import CloudParticles
-    from yan_gua.vortex import VortexController
+    from yan_gua.vortex import VortexController, phase_label
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.poster.parent.mkdir(parents=True, exist_ok=True)

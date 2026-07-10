@@ -89,7 +89,7 @@ def main():
     from yan_gua.offline_renderer import ParticleFrameRenderer
     from yan_gua.physics import CloudParticles
     from yan_gua.tracking import HandTracker
-    from yan_gua.vortex import VortexController
+    from yan_gua.vortex import VortexController, phase_label
 
     video_path = str(args.input)
     output_path = str(args.output)
@@ -137,17 +137,7 @@ def main():
         vortices = vortex_controller.update(hand_states, dt)
         cloud.update(dt, vortices)
 
-        phases = {field["phase"] for field in vortices if field["active"]}
-        if "dispersing" in phases:
-            label = "FAST / BREAK"
-        elif "echo" in phases:
-            label = "ECHO / RELEASE"
-        elif "holding" in phases:
-            label = "SLOW / HOLD"
-        elif "forming" in phases:
-            label = "FORMING"
-        else:
-            label = "DORMANT"
+        label = phase_label(vortices)
         final = renderer.render(cloud, vortices, phase_label=label)
 
         if not args.no_camera:

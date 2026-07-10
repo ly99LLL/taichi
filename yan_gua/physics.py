@@ -20,6 +20,7 @@ from yan_gua.config import (
     PARTICLE_SIZE_MAX,
     PARTICLE_SIZE_MIN,
     SCATTER_COLOR,
+    VORTEX_HAND_CARRY,
     VORTEX_INFLUENCE_RADIUS,
     VORTEX_ORBIT_RADIUS,
     VORTEX_ORBIT_SPEED,
@@ -51,6 +52,7 @@ def _particle_physics_kernel(
     hrelease_arr: ti.types.ndarray(dtype=ti.f32, ndim=1),
     hmaturity_arr: ti.types.ndarray(dtype=ti.f32, ndim=1),
     haperture_arr: ti.types.ndarray(dtype=ti.f32, ndim=1),
+    hsplash_arr: ti.types.ndarray(dtype=ti.f32, ndim=1),
     hspin_arr: ti.types.ndarray(dtype=ti.f32, ndim=1),
     hactive_arr: ti.types.ndarray(dtype=ti.i32, ndim=1),
     dt: ti.f32,
@@ -86,9 +88,27 @@ def _particle_physics_kernel(
                     unit_distance = 1.0 - dist / reach
                     falloff = unit_distance * unit_distance * (3.0 - 2.0 * unit_distance)
 
-                    ring_radius = orbit_r * (1.0 + hrelease_arr[h] * 0.9 + haperture_arr[h])
-                    ring_width = ring_radius * (0.32 + hscatter_arr[h] * 0.55)
+                    maturity_curve = (
+                        hmaturity_arr[h] * hmaturity_arr[h] * (3.0 - 2.0 * hmaturity_arr[h])
+                    )
+                    forming = 1.0 - maturity_curve
+                    irregular = (
+                        ti.sin(ti.cast(i, ti.f32) * 12.9898 + ti.cast(h, ti.f32) * 78.233)
+                        + ti.sin(
+                            ti.cast(i, ti.f32) * 4.1414
+                            + hmaturity_arr[h] * 9.31
+                            + ti.cast(h, ti.f32) * 13.17
+                        )
+                    ) * 0.5
+                    ring_radius = orbit_r * (
+                        0.16 + maturity_curve * 0.84 + hrelease_arr[h] * 0.9 + haperture_arr[h]
+                    )
+                    ring_radius += irregular * orbit_r * forming * 0.16
+                    ring_radius = ti.math.clamp(ring_radius, orbit_r * 0.12, orbit_r * 1.7)
+                    ring_width = ring_radius * (0.50 + hscatter_arr[h] * 0.55)
+                    ring_width += orbit_r * forming * 0.1
                     ring_band = ti.exp(-ti.abs(dist - ring_radius) / (ring_width + 0.001))
+                    nucleus_band = ti.exp(-dist / (orbit_r * (0.2 + forming * 0.18) + 0.001))
 
                     maturity_gain = 0.28 + hmaturity_arr[h] * 0.72
                     coherent = hstrength_arr[h] * hcoherence_arr[h] * maturity_gain
@@ -100,21 +120,32 @@ def _particle_physics_kernel(
                         * (0.58 + ring_band * 0.42)
                         * (1.0 + haperture_arr[h] * 0.18)
                     )
-                    target_vx = tangent_x * orbit_speed + hvx_arr[h] * 0.08
-                    target_vy = tangent_y * orbit_speed + hvy_arr[h] * 0.08
-                    steering = coherent * falloff * (1.8 + ring_band * 2.4)
+                    target_vx = tangent_x * orbit_speed + hvx_arr[h] * VORTEX_HAND_CARRY
+                    target_vy = tangent_y * orbit_speed + hvy_arr[h] * VORTEX_HAND_CARRY
+                    steering = coherent * falloff * (4.8 + ring_band * 6.5)
                     vx[i] += (target_vx - vx[i]) * steering * dt
                     vy[i] += (target_vy - vy[i]) * steering * dt
 
                     # 空心轨道：环外向内收，环内向外托住，掌心保持安静。
                     ring_error = ti.math.clamp(
-                        (dist - ring_radius) * 3.2,
-                        -230.0,
-                        330.0,
+                        (dist - ring_radius) * 7.5,
+                        -340.0,
+                        470.0,
                     )
-                    radial_gain = hstrength_arr[h] * (0.22 + hcoherence_arr[h] * 0.78)
+                    radial_gain = hstrength_arr[h] * (0.05 + hcoherence_arr[h] * 0.95)
                     vx[i] -= normal_x * ring_error * radial_gain * falloff * dt
                     vy[i] -= normal_y * ring_error * radial_gain * falloff * dt
+
+                    forming_push = (
+                        hstrength_arr[h]
+                        * hcoherence_arr[h]
+                        * forming
+                        * falloff
+                        * (0.35 + nucleus_band * 0.65)
+                        * 230.0
+                    )
+                    vx[i] += normal_x * forming_push * dt
+                    vy[i] += normal_y * forming_push * dt
 
                     # 快手不制造新涡旋，而是把现有轨道剪碎、吹散。
                     burst = scattered * falloff * (0.35 + ring_band * 0.65)
@@ -128,11 +159,25 @@ def _particle_physics_kernel(
                     vx[i] += normal_x * release_force * dt
                     vy[i] += normal_y * release_force * dt
 
+                    carried_speed = (
+                        ti.sqrt(hvx_arr[h] * hvx_arr[h] + hvy_arr[h] * hvy_arr[h]) + 0.001
+                    )
+                    splash = hsplash_arr[h] * hstrength_arr[h] * falloff
+                    if splash > 0.001:
+                        motion_x = hvx_arr[h] / carried_speed
+                        motion_y = hvy_arr[h] / carried_speed
+                        side_x = -motion_y * hspin_arr[h]
+                        side_y = motion_x * hspin_arr[h]
+                        directional = 460.0 * splash * (0.35 + ring_band * 0.65)
+                        spray = (ti.random(dtype=ti.f32) * 2.0 - 1.0) * 115.0 * splash
+                        vx[i] += (motion_x * directional + side_x * spray) * dt
+                        vy[i] += (motion_y * directional + side_y * spray) * dt
+
                     signal = (
                         hstrength_arr[h]
                         * falloff
                         * (
-                            hcoherence_arr[h] * ring_band
+                            hcoherence_arr[h] * (ring_band + nucleus_band * forming * 0.75)
                             + hscatter_arr[h] * 0.42
                             + (1.0 - hrelease_arr[h]) * 0.08
                         )
@@ -163,7 +208,7 @@ def _particle_physics_kernel(
                 bridge_dx = px[i] - nearest_x
                 bridge_dy = py[i] - nearest_y
                 bridge_dist = ti.sqrt(bridge_dx * bridge_dx + bridge_dy * bridge_dy) + 0.001
-                bridge_width = orbit_r * 0.72
+                bridge_width = orbit_r * 0.86
 
                 if bridge_dist < bridge_width:
                     center_weight = ti.sin(3.14159265 * projection / pair_dist)
@@ -175,22 +220,28 @@ def _particle_physics_kernel(
                     )
                     bridge_nx = bridge_dx / bridge_dist
                     bridge_ny = bridge_dy / bridge_dist
-                    vx[i] -= bridge_nx * bridge_dist * 5.5 * bridge_weight * dt
-                    vy[i] -= bridge_ny * bridge_dist * 5.5 * bridge_weight * dt
-                    vx[i] += -axis_y * hspin_arr[0] * 75.0 * bridge_weight * dt
-                    vy[i] += axis_x * hspin_arr[0] * 75.0 * bridge_weight * dt
+                    compression = (bridge_width - bridge_dist) / bridge_width
+                    rebound = 430.0 * bridge_weight * compression
+                    shear = 170.0 * bridge_weight * (0.4 + compression * 0.6)
+                    away_from_center = 1.0
+                    if projection < pair_dist * 0.5:
+                        away_from_center = -1.0
+                    vx[i] += bridge_nx * rebound * dt
+                    vy[i] += bridge_ny * rebound * dt
+                    vx[i] += axis_x * away_from_center * shear * dt
+                    vy[i] += axis_y * away_from_center * shear * dt
                     if bridge_weight * 0.7 > visual_signal:
                         visual_signal = bridge_weight * 0.7
                         visual_coherence = 1.0
-                        visual_scatter = 0.0
+                        visual_scatter = bridge_weight * 0.45
                         visual_release = 0.0
 
         # 可见度来自“被组织起来”，不是粒子的出生。
         if visual_signal > 0.001:
             target_alpha = base_alpha[i] + visual_signal * (30.0 + visual_coherence * 54.0)
-            target_radius = base_radius[i] + visual_signal * (0.7 + visual_coherence * 2.7)
-            alpha[i] += (target_alpha - alpha[i]) * ti.min(dt * 8.0, 1.0)
-            radius[i] += (target_radius - radius[i]) * ti.min(dt * 7.0, 1.0)
+            target_radius = base_radius[i] + visual_signal * (0.9 + visual_coherence * 3.0)
+            alpha[i] += (target_alpha - alpha[i]) * ti.min(dt * 10.5, 1.0)
+            radius[i] += (target_radius - radius[i]) * ti.min(dt * 9.5, 1.0)
 
             if visual_release > 0.35:
                 ink_level[i] = 0 + i % 3
@@ -204,8 +255,8 @@ def _particle_physics_kernel(
             ink_level[i] = base_ink[i]
 
         speed_sq = vx[i] * vx[i] + vy[i] * vy[i]
-        if speed_sq > 700.0 * 700.0:
-            speed_scale = 700.0 / ti.sqrt(speed_sq)
+        if speed_sq > 780.0 * 780.0:
+            speed_scale = 780.0 / ti.sqrt(speed_sq)
             vx[i] *= speed_scale
             vy[i] *= speed_scale
 
@@ -275,6 +326,7 @@ class CloudParticles:
         self._hrelease = np.ones(2, dtype=np.float32)
         self._hmaturity = np.zeros(2, dtype=np.float32)
         self._haperture = np.zeros(2, dtype=np.float32)
+        self._hsplash = np.zeros(2, dtype=np.float32)
         self._hspin = np.array([1.0, -1.0], dtype=np.float32)
         self._hactive = np.zeros(2, dtype=np.int32)
 
@@ -302,6 +354,7 @@ class CloudParticles:
             self._hrelease,
             self._hmaturity,
             self._haperture,
+            self._hsplash,
             self._hspin,
             self._hactive,
             dt,
@@ -368,9 +421,10 @@ class CloudParticles:
             self._hstrength[slot] = field.get("strength", 0.0)
             self._hcoherence[slot] = field.get("coherence", 0.0)
             self._hscatter[slot] = field.get("scatter", 0.0)
-            self._hrelease[slot] = field.get("release", 0.0)
+            self._hrelease[slot] = field.get("release", 1.0)
             self._hmaturity[slot] = field.get("maturity", 0.0)
             self._haperture[slot] = field.get("aperture", 0.0)
+            self._hsplash[slot] = field.get("splash", 0.0)
             self._hspin[slot] = field.get("spin", 1.0 if slot == 0 else -1.0)
             self._hactive[slot] = 1
 

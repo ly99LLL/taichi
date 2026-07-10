@@ -11,7 +11,9 @@ This file provides guidance to Codex when working in this repository.
 
 ```bash
 python -m yan_gua
+python -m yan_gua --arch cpu
 python scripts/render_video.py
+python scripts/render_demo.py --arch cpu
 
 python -m pytest tests/ -m "not cuda" -v
 python -m pytest tests/test_physics.py -v
@@ -41,8 +43,8 @@ git push origin master
                VortexController
        forming / holding / dispersing / echo
                          ↓
-          Taichi Kernel (6000 粒子)
-     常驻尘场 / 双涡环 / 解束 / ∞ 流桥
+          Taichi Kernel (7200 粒子)
+     常驻尘场 / 双涡环 / 解束 / 弹性碰撞
                          ↓
           py5 或 OpenCV 离线渲染
 ```
